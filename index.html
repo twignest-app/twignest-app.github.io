@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TwigNest</title>
-<link rel="icon" href="logo.png">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -15,7 +16,7 @@ body{font-family:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;backgrou
 button,input,select{font:inherit;color:inherit}
 :focus-visible{outline:3px solid var(--plum-2);outline-offset:2px}
 header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line)}
-header img{height:52px;width:auto}
+header img{height:44px;width:auto}
 header h1{display:none}
 h2,.btn,.tabs button{font-family:"Poppins","Nunito",system-ui,sans-serif}
 .card h2{font-weight:600}
@@ -24,7 +25,7 @@ main{max-width:980px;margin:0 auto;padding:24px 20px 48px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:18px}
 .card h2{margin:0 0 8px;font-size:20px;color:var(--plum)}
 .narrow{max-width:440px;margin:24px auto}
-.hero{text-align:center;margin:0 0 20px}.hero img{width:min(300px,80vw);height:auto;display:block;margin:0 auto}
+.hero{text-align:center;margin:0 0 20px}.hero img{width:min(440px,88vw);height:auto;display:block;margin:0 auto}
 body.auth header{display:none}
 .btn{box-shadow:0 2px 0 rgba(70,45,91,.15)}
 .tabs button[aria-pressed="true"]{box-shadow:none}
@@ -206,7 +207,7 @@ async function leadPanel(p, school){
 }
 
 function waitView(title, text){
-  app.innerHTML = `<div class="narrow card" style="text-align:center"><img src="logo.png" alt="" style="width:160px;height:auto"><h2>${esc(title)}</h2><p class="note">${esc(text)}</p>
+  app.innerHTML = `<div class="narrow card" style="text-align:center"><img src="icon.png" alt="" style="width:120px;height:auto"><h2>${esc(title)}</h2><p class="note">${esc(text)}</p>
     <button class="btn ghost" id="chk">Check again</button></div>`;
   document.getElementById("chk").onclick = render;
 }
