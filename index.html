@@ -54,6 +54,21 @@ th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);font-
 th{color:var(--muted);font-size:13px}
 td select{width:auto;padding:6px 8px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+textarea{width:100%;min-height:90px;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px;font:inherit;color:inherit}
+input[type=number]{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 10px;width:100%}
+.card h3{font-family:"Poppins","Nunito",sans-serif;font-weight:600;font-size:16px;margin:16px 0 6px}
+.wsteps{list-style:none;padding:0;margin:0 0 18px;display:flex;gap:6px;flex-wrap:wrap}
+.wsteps button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:14px}
+.wsteps button[aria-current="step"]{background:var(--plum);color:#fff;border-color:var(--plum)}
+.wsteps .n{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--plum-soft);color:var(--plum);font-size:12px;margin-right:6px}
+.colcard{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:12px 0;background:var(--bg)}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:4px 16px}
+label.check{display:flex;gap:8px;align-items:center;margin-top:34px}
+.issue{padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px;display:flex;gap:10px;align-items:center;justify-content:space-between}
+.ok{color:var(--sage);font-weight:800}
+.navtabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.navtabs button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 16px;font-weight:700;cursor:pointer;font-family:"Poppins","Nunito",sans-serif}
+.navtabs button[aria-pressed="true"]{background:var(--plum);color:#fff;border-color:var(--plum)}
 </style>
 </head>
 <body>
@@ -65,6 +80,7 @@ td select{width:auto;padding:6px 8px}
 <main id="app"><p class="note">Loading…</p></main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="setup.js"></script>
 <script>
 const SUPABASE_URL = "https://oivsizxgekpiltrmrmqh.supabase.co";
 const SUPABASE_KEY = "sb_publishable_5cHJA5XXHwRe-YyTeo-deA_-3xZS5DP";
@@ -73,7 +89,7 @@ const app = document.getElementById("app"), who = document.getElementById("who")
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ROLES = {admin:"TwigNest admin", school_lead:"School lead", teacher:"Teacher", checker:"Buddy checker"};
 const here = location.origin + location.pathname;
-let authTab = "signin", recovering = false;
+let authTab = "signin", recovering = false, leadTab = "setup";
 
 function friendly(e){
   const m = (e && (e.message || e.error_description)) || String(e);
@@ -226,10 +242,18 @@ async function render(){
   if (school.status === "pending") return waitView(`${school.name} is waiting for approval`, "TwigNest will review your school soon. You’ll be able to set it up as soon as it’s approved.");
   if (school.status === "suspended") return waitView("Access paused", `${school.name}’s access to TwigNest is paused. Please contact TwigNest.`);
   if (!p.active) return waitView("Waiting for your school lead", `You’ve joined ${school.name}. Your school lead needs to approve your account before you can start.`);
-  app.innerHTML = `<div class="card"><h2>${esc(school.name)}</h2><p class="note">Welcome, ${esc((p.full_name||"").split(" ")[0])}. Your class sheets, setup and reports will appear here as TwigNest is built.</p></div>
-    ${p.role === "school_lead" ? `<div class="grid2"><div class="card"><h2>Your school code</h2><p class="note">Give this code to your teachers. They create an account, choose “Join my school” and enter it. You then approve them below.</p><div class="code">${esc(school.join_code)}</div></div></div>
-      <div class="card"><h2>Staff</h2><p class="note">Approve teachers who have joined and choose their role.</p><div id="members" class="tablewrap"><p class="note">Loading…</p></div></div>` : ""}`;
-  if (p.role === "school_lead") leadPanel(p, school);
+  if (p.role === "school_lead") {
+    app.innerHTML = `<div class="navtabs" role="group" aria-label="Sections"><button data-lt="setup" aria-pressed="${leadTab==="setup"}">School setup</button><button data-lt="staff" aria-pressed="${leadTab==="staff"}">Staff and school code</button></div><div id="leadBody"></div>`;
+    app.querySelectorAll("[data-lt]").forEach(b => b.onclick = () => { leadTab = b.dataset.lt; render(); });
+    const body = document.getElementById("leadBody");
+    if (leadTab === "setup") return TNSetup.open({ sb, school, profile: p, el: body });
+    body.innerHTML = `<div class="grid2"><div class="card"><h2>Your school code</h2><p class="note">Give this code to your teachers. They create an account, choose “Join my school” and enter it. You then approve them below.</p><div class="code">${esc(school.join_code)}</div></div></div>
+      <div class="card"><h2>Staff</h2><p class="note">Approve teachers who have joined and choose their role.</p><div id="members" class="tablewrap"><p class="note">Loading…</p></div></div>`;
+    return leadPanel(p, school);
+  }
+  const { data: setups } = await sb.from("school_setups").select("status,year").eq("school_id", school.id).order("updated_at", { ascending: false }).limit(1);
+  const ready = setups && setups[0] && setups[0].status === "live";
+  app.innerHTML = `<div class="card"><h2>${esc(school.name)}</h2><p class="note">Welcome, ${esc((p.full_name||"").split(" ")[0])}. ${ready ? `Your school’s setup for ${esc(setups[0].year)} is ready. Your class sheets will appear here soon.` : "Your school lead is still setting up TwigNest. Your class sheets will appear here once it’s ready."}</p></div>`;
 }
 
 sb.auth.onAuthStateChange((event) => {
