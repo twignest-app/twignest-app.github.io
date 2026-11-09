@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TwigNest</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--plum:#5E3457;--plum-2:#7B4A73;--plum-soft:#F2E8F0;--sage:#5F7F54;--sage-soft:#E7EFE2;--amber:#A86C12;--amber-soft:#FBF0DC;--red:#B4473A;--red-soft:#F8E4E1;--bg:#FAF8FA;--card:#FFFFFF;--ink:#2B2230;--muted:#6E6472;--line:#E6DEE5;color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--plum:#D7A9CE;--plum-2:#E5BFDD;--plum-soft:#3A2836;--sage:#A7C59A;--sage-soft:#26331F;--amber:#E6B566;--amber-soft:#3A2E17;--red:#E8897C;--red-soft:#3D2220;--bg:#1B171C;--card:#252027;--ink:#F1EAF0;--muted:#B3A8B2;--line:#3A3239;color-scheme:dark}}
+*{box-sizing:border-box}html,body{margin:0}
+body{font-family:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);font-size:16px;line-height:1.55;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--plum-2);outline-offset:2px}
+header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line)}
+header img{width:48px;height:48px;border-radius:50%}
+header h1{margin:0;font-size:22px;font-weight:800;color:var(--plum)}header h1 span{color:var(--sage)}
+header .who{margin-left:auto;display:flex;gap:10px;align-items:center;font-size:14px;color:var(--muted)}
+main{max-width:980px;margin:0 auto;padding:24px 20px 48px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:18px}
+.card h2{margin:0 0 8px;font-size:20px;color:var(--plum)}
+.narrow{max-width:440px;margin:24px auto}
+.hero{text-align:center;margin:10px 0 18px}.hero img{width:170px;height:170px;border-radius:50%}
+.hero p{color:var(--muted);margin:6px 0 0}
+label{display:block;font-weight:700;font-size:14px;margin:12px 0 4px}
+input[type=text],input[type=email],input[type=password],select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px}
+.btn{border:0;background:var(--plum);color:#fff;border-radius:999px;padding:10px 20px;font-weight:800;cursor:pointer}
+.btn.ghost{background:var(--bg);color:var(--plum);border:1px solid var(--line)}
+.btn.small{padding:6px 12px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:wait}
+.full{width:100%;margin-top:16px}
+.tabs{display:flex;gap:6px;margin-bottom:6px}
+.tabs button{flex:1;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px;font-weight:700;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--plum);color:#fff;border-color:var(--plum)}
+.link{background:none;border:0;color:var(--plum);font-weight:700;cursor:pointer;padding:0;text-decoration:underline}
+.msg{border-radius:12px;padding:10px 14px;margin-top:12px;font-weight:600;font-size:14px}
+.msg.err{background:var(--red-soft);color:var(--red)}.msg.ok{background:var(--sage-soft);color:var(--sage)}.msg.info{background:var(--amber-soft);color:var(--amber)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+.note{color:var(--muted);font-size:14px}
+.badge{display:inline-block;font-size:12.5px;font-weight:800;padding:3px 10px;border-radius:999px}
+.b-pending{background:var(--amber-soft);color:var(--amber)}.b-approved{background:var(--sage-soft);color:var(--sage)}.b-suspended{background:var(--red-soft);color:var(--red)}
+.code{font-size:28px;font-weight:800;letter-spacing:.15em;color:var(--plum);background:var(--plum-soft);border-radius:12px;padding:8px 16px;display:inline-block}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle}
+th{color:var(--muted);font-size:13px}
+td select{width:auto;padding:6px 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+</style>
+</head>
+<body>
+<header>
+  <img src="logo.png" alt="TwigNest logo">
+  <h1>Twig<span>Nest</span></h1>
+  <div class="who" id="who"></div>
+</header>
+<main id="app"><p class="note">Loading…</p></main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = "https://oivsizxgekpiltrmrmqh.supabase.co";
+const SUPABASE_KEY = "sb_publishable_5cHJA5XXHwRe-YyTeo-deA_-3xZS5DP";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const app = document.getElementById("app"), who = document.getElementById("who");
+const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ROLES = {admin:"TwigNest admin", school_lead:"School lead", teacher:"Teacher", checker:"Buddy checker"};
+const here = location.origin + location.pathname;
+let authTab = "signin", recovering = false;
+
+function friendly(e){
+  const m = (e && (e.message || e.error_description)) || String(e);
+  if (/Invalid login/i.test(m)) return "The email or password is not correct.";
+  if (/Email not confirmed/i.test(m)) return "Please confirm your email first. Check your inbox for the link from TwigNest.";
+  if (/already registered/i.test(m)) return "An account with this email already exists. Try signing in instead.";
+  if (/Password should be/i.test(m)) return "The password needs at least 8 characters.";
+  if (/rate limit/i.test(m)) return "Too many attempts. Please wait a few minutes and try again.";
+  return m;
+}
+function show(el, text, kind){ el.innerHTML = text ? `<div class="msg ${kind}">${esc(text)}</div>` : ""; }
+async function busy(btn, fn){ btn.disabled = true; try { await fn(); } finally { btn.disabled = false; } }
+
+function authView(){
+  who.innerHTML = "";
+  app.innerHTML = `<div class="narrow">
+    <div class="hero"><img src="logo.png" alt=""><p>Track every student’s progress, from baseline to the end of the year.</p></div>
+    <div class="card">
+      <div class="tabs" role="group" aria-label="Account">
+        <button data-tab="signin" aria-pressed="${authTab==="signin"}">Sign in</button>
+        <button data-tab="signup" aria-pressed="${authTab==="signup"}">Create account</button>
+      </div>
+      <form id="authForm">
+        ${authTab==="signup" ? `<label for="name">Full name</label><input id="name" type="text" autocomplete="name" required>` : ""}
+        <label for="email">Email</label><input id="email" type="email" autocomplete="email" required>
+        ${authTab!=="forgot" ? `<label for="pw">Password</label><input id="pw" type="password" minlength="8" autocomplete="${authTab==="signup"?"new-password":"current-password"}" required>` : ""}
+        <button class="btn full" id="authBtn" type="submit">${authTab==="signin"?"Sign in":authTab==="signup"?"Create account":"Send reset link"}</button>
+      </form>
+      ${authTab==="signin" ? `<p class="note" style="margin-top:12px"><button class="link" data-tab="forgot">Forgot your password?</button></p>` : ""}
+      ${authTab==="forgot" ? `<p class="note" style="margin-top:12px"><button class="link" data-tab="signin">Back to sign in</button></p>` : ""}
+      <div id="authMsg"></div>
+    </div></div>`;
+  document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { authTab = b.dataset.tab; authView(); });
+  document.getElementById("authForm").onsubmit = e => { e.preventDefault(); const btn = document.getElementById("authBtn"), msg = document.getElementById("authMsg");
+    busy(btn, async () => {
+      const email = document.getElementById("email").value.trim();
+      if (authTab === "signin") {
+        const { error } = await sb.auth.signInWithPassword({ email, password: document.getElementById("pw").value });
+        if (error) return show(msg, friendly(error), "err");
+      } else if (authTab === "signup") {
+        const { error } = await sb.auth.signUp({ email, password: document.getElementById("pw").value,
+          options: { data: { full_name: document.getElementById("name").value.trim() }, emailRedirectTo: here } });
+        if (error) return show(msg, friendly(error), "err");
+        show(msg, "Account created. Check your email and tap the confirmation link, then sign in here.", "ok");
+      } else {
+        const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: here });
+        if (error) return show(msg, friendly(error), "err");
+        show(msg, "If this email has an account, a reset link is on its way.", "ok");
+      }
+    }); };
+}
+
+function resetView(){
+  app.innerHTML = `<div class="narrow card"><h2>Choose a new password</h2>
+    <form id="rf"><label for="np">New password</label><input id="np" type="password" minlength="8" autocomplete="new-password" required>
+    <button class="btn full" id="rb" type="submit">Save new password</button></form><div id="rm"></div></div>`;
+  document.getElementById("rf").onsubmit = e => { e.preventDefault(); const btn = document.getElementById("rb");
+    busy(btn, async () => { const { error } = await sb.auth.updateUser({ password: document.getElementById("np").value });
+      if (error) return show(document.getElementById("rm"), friendly(error), "err");
+      recovering = false; render(); }); };
+}
+
+function header(p){
+  who.innerHTML = `<span>${esc(p.full_name || p.email)} · ${ROLES[p.role] || ""}</span><button class="btn ghost small" id="out">Sign out</button>`;
+  document.getElementById("out").onclick = async () => { await sb.auth.signOut(); authTab = "signin"; render(); };
+}
+
+function chooseView(p){
+  app.innerHTML = `<div class="card"><h2>Welcome to TwigNest, ${esc((p.full_name||"").split(" ")[0])}</h2>
+    <p class="note">Is your school new to TwigNest, or has your school already joined?</p></div>
+    <div class="grid2">
+      <div class="card"><h2>Register my school</h2><p class="note">For school leaders. TwigNest will review and approve your school, then you can invite your teachers.</p>
+        <form id="regF"><label for="sn">School name</label><input id="sn" type="text" required>
+        <label for="sc">Country</label><input id="sc" type="text" value="United Arab Emirates" required>
+        <button class="btn full" id="regB" type="submit">Register school</button></form><div id="regM"></div></div>
+      <div class="card"><h2>Join my school</h2><p class="note">For teachers. Ask your school lead for your school’s 6-character code.</p>
+        <form id="joinF"><label for="jc">School code</label><input id="jc" type="text" maxlength="6" style="text-transform:uppercase;letter-spacing:.15em" required>
+        <button class="btn full" id="joinB" type="submit">Join school</button></form><div id="joinM"></div></div>
+    </div>`;
+  document.getElementById("regF").onsubmit = e => { e.preventDefault(); busy(document.getElementById("regB"), async () => {
+    const { error } = await sb.rpc("register_school", { p_name: document.getElementById("sn").value, p_country: document.getElementById("sc").value });
+    if (error) return show(document.getElementById("regM"), friendly(error), "err"); render(); }); };
+  document.getElementById("joinF").onsubmit = e => { e.preventDefault(); busy(document.getElementById("joinB"), async () => {
+    const { error } = await sb.rpc("join_school", { p_code: document.getElementById("jc").value });
+    if (error) return show(document.getElementById("joinM"), friendly(error), "err"); render(); }); };
+}
+
+async function adminView(){
+  app.innerHTML = `<div class="card"><h2>Schools</h2><p class="note">Approve new schools before they can use TwigNest.</p><div id="schools" class="tablewrap"><p class="note">Loading…</p></div></div>`;
+  const { data: schools, error } = await sb.from("schools").select("*").order("created_at", { ascending: false });
+  const box = document.getElementById("schools");
+  if (error) return show(box, friendly(error), "err");
+  if (!schools.length) { box.innerHTML = `<p class="note">No schools have registered yet.</p>`; return; }
+  const ids = [...new Set(schools.map(s => s.created_by).filter(Boolean))];
+  const { data: people } = ids.length ? await sb.from("profiles").select("id,full_name,email").in("id", ids) : { data: [] };
+  const lead = id => (people || []).find(x => x.id === id);
+  box.innerHTML = `<table><tr><th>School</th><th>Registered by</th><th>Code</th><th>Status</th><th></th></tr>
+    ${schools.map(s => { const l = lead(s.created_by); return `<tr><td><b>${esc(s.name)}</b><br><span class="note">${esc(s.country)}</span></td>
+      <td>${esc(l ? (l.full_name || "") : "")}<br><span class="note">${esc(l ? l.email : "")}</span></td><td>${esc(s.join_code)}</td>
+      <td><span class="badge b-${s.status}">${s.status[0].toUpperCase() + s.status.slice(1)}</span></td>
+      <td class="row">${s.status !== "approved" ? `<button class="btn small" data-s="${s.id}" data-st="approved">Approve</button>` : ""}
+        ${s.status !== "suspended" ? `<button class="btn ghost small" data-s="${s.id}" data-st="suspended">Suspend</button>` : ""}</td></tr>`; }).join("")}</table>`;
+  box.querySelectorAll("[data-s]").forEach(b => b.onclick = () => busy(b, async () => {
+    if (b.dataset.st === "suspended" && !confirm("Suspend this school? Its members will lose access until you approve it again.")) return;
+    const { error } = await sb.rpc("set_school_status", { p_school: b.dataset.s, p_status: b.dataset.st });
+    if (error) return alert(friendly(error)); adminView(); }));
+}
+
+async function leadPanel(p, school){
+  const box = document.getElementById("members");
+  const { data: members, error } = await sb.from("profiles").select("*").eq("school_id", school.id).order("created_at");
+  if (error) return show(box, friendly(error), "err");
+  const opts = r => ["school_lead","teacher","checker"].map(x => `<option value="${x}" ${x===r?"selected":""}>${ROLES[x]}</option>`).join("");
+  box.innerHTML = `<table><tr><th>Name</th><th>Role</th><th>Access</th><th></th></tr>
+    ${members.map(m => `<tr><td><b>${esc(m.full_name || "")}</b><br><span class="note">${esc(m.email)}</span></td>
+      <td>${m.id === p.id ? ROLES[m.role] : `<select data-role="${m.id}" aria-label="Role for ${esc(m.full_name || m.email)}">${opts(m.role)}</select>`}</td>
+      <td>${m.active ? `<span class="badge b-approved">Active</span>` : `<span class="badge b-pending">Waiting for approval</span>`}</td>
+      <td>${m.id === p.id ? "" : m.active ? `<button class="btn ghost small" data-act="${m.id}" data-on="false">Remove access</button>` : `<button class="btn small" data-act="${m.id}" data-on="true">Approve</button>`}</td></tr>`).join("")}</table>`;
+  const roleOf = id => members.find(m => m.id === id);
+  box.querySelectorAll("[data-act]").forEach(b => b.onclick = () => busy(b, async () => {
+    const m = roleOf(b.dataset.act), sel = box.querySelector(`[data-role="${m.id}"]`);
+    const { error } = await sb.rpc("set_member", { p_member: m.id, p_role: sel ? sel.value : m.role, p_active: b.dataset.on === "true" });
+    if (error) return alert(friendly(error)); leadPanel(p, school); }));
+  box.querySelectorAll("[data-role]").forEach(s => s.onchange = async () => {
+    const m = roleOf(s.dataset.role);
+    const { error } = await sb.rpc("set_member", { p_member: m.id, p_role: s.value, p_active: m.active });
+    if (error) alert(friendly(error)); leadPanel(p, school); });
+}
+
+function waitView(title, text){
+  app.innerHTML = `<div class="narrow card" style="text-align:center"><img src="logo.png" alt="" style="width:110px;height:110px;border-radius:50%"><h2>${esc(title)}</h2><p class="note">${esc(text)}</p>
+    <button class="btn ghost" id="chk">Check again</button></div>`;
+  document.getElementById("chk").onclick = render;
+}
+
+async function render(){
+  if (recovering) return resetView();
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return authView();
+  const { data: p, error } = await sb.from("profiles").select("*").eq("id", session.user.id).single();
+  if (error || !p) { app.innerHTML = `<div class="card"><div class="msg err">We couldn’t load your account. Please sign out and try again.</div></div>`; return; }
+  header(p);
+  if (p.role === "admin") return adminView();
+  if (!p.school_id) return chooseView(p);
+  const { data: school } = await sb.from("schools").select("*").eq("id", p.school_id).single();
+  if (!school) return waitView("Almost there", "We couldn’t find your school. Please contact TwigNest.");
+  if (school.status === "pending") return waitView(`${school.name} is waiting for approval`, "TwigNest will review your school soon. You’ll be able to set it up as soon as it’s approved.");
+  if (school.status === "suspended") return waitView("Access paused", `${school.name}’s access to TwigNest is paused. Please contact TwigNest.`);
+  if (!p.active) return waitView("Waiting for your school lead", `You’ve joined ${school.name}. Your school lead needs to approve your account before you can start.`);
+  app.innerHTML = `<div class="card"><h2>${esc(school.name)}</h2><p class="note">Welcome, ${esc((p.full_name||"").split(" ")[0])}. Your class sheets, setup and reports will appear here as TwigNest is built.</p></div>
+    ${p.role === "school_lead" ? `<div class="grid2"><div class="card"><h2>Your school code</h2><p class="note">Give this code to your teachers. They create an account, choose “Join my school” and enter it. You then approve them below.</p><div class="code">${esc(school.join_code)}</div></div></div>
+      <div class="card"><h2>Staff</h2><p class="note">Approve teachers who have joined and choose their role.</p><div id="members" class="tablewrap"><p class="note">Loading…</p></div></div>` : ""}`;
+  if (p.role === "school_lead") leadPanel(p, school);
+}
+
+sb.auth.onAuthStateChange((event) => {
+  if (event === "PASSWORD_RECOVERY") { recovering = true; resetView(); return; }
+  if (event === "SIGNED_IN" || event === "SIGNED_OUT") setTimeout(render, 0);
+});
+render();
+</script>
+</body>
+</html>
