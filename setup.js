@@ -57,7 +57,7 @@
     });
   }
 
-  let bound = false, C, ctx, ui = { step: 0, strand: null, grade: null }, row = null, saveTimer = null, saveState = "";
+  let USED = { col: new Set(), obj: new Set(), strand: new Set() }, GRADES_USED = new Set(), bound = false, C, ctx, ui = { step: 0, strand: null, grade: null }, row = null, saveTimer = null, saveState = "";
   const all = () => { const o = []; C.subjects.forEach(sb => sb.strands.forEach(st => o.push([sb, st]))); return o; };
   const findStrand = id => all().find(p => p[1].id === id) || [null, null];
   const findCol = id => { for (const [sb, st] of all()) for (const c of st.cols) if (c.id === id) return c; return null; };
@@ -107,19 +107,23 @@
   }
   function setStatus(t, bad) { saveState = t; const el = document.getElementById("setupSave"); if (el) { el.textContent = t; el.style.color = bad ? "var(--red)" : "var(--muted)"; } }
 
+  const objUsed = x => x.type === "objectives" && Object.values(x.objectives || {}).some(per => per.some(list => list.some(o => USED.obj.has(o.id))));
+  const colLocked = x => USED.col.has(x.id) || objUsed(x);
+  const strandLocked = st => USED.strand.has(st.id) || st.cols.some(colLocked);
   function colForm(x) {
-    const f = (fld, label, val) => `<div><label for="${x.id}-${fld}">${label}</label><input id="${x.id}-${fld}" type="number" step="any" data-colf="${fld}" data-col="${x.id}" value="${esc(val)}"></div>`;
+    const L = colLocked(x), dis = L ? "disabled" : "";
+    const f = (fld, label, val, extra = "") => `<div><label for="${x.id}-${fld}">${label}</label><input id="${x.id}-${fld}" type="number" step="any" data-colf="${fld}" data-col="${x.id}" value="${esc(val)}" ${extra}></div>`;
     let h = `<div class="colcard"><div class="grid3">
       <div><label for="${x.id}-name">Column name</label><input id="${x.id}-name" type="text" data-colf="name" data-col="${x.id}" value="${esc(x.name)}"></div>
-      <div><label for="${x.id}-type">Type</label><select id="${x.id}-type" data-colf="type" data-col="${x.id}">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${k === x.type ? "selected" : ""}>${v.label}</option>`).join("")}</select></div>
-      <div><label class="check"><input type="checkbox" data-colf="baseline" data-col="${x.id}" ${x.baseline ? "checked" : ""} ${x.type === "objectives" || x.type === "comment" ? "disabled" : ""}> Baseline column</label><p class="note">Recorded once, at the start of the year.</p></div></div>
+      <div><label for="${x.id}-type">Type</label><select id="${x.id}-type" data-colf="type" data-col="${x.id}" ${dis}>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${k === x.type ? "selected" : ""}>${v.label}</option>`).join("")}</select></div>
+      <div><label class="check"><input type="checkbox" data-colf="baseline" data-col="${x.id}" ${x.baseline ? "checked" : ""} ${x.type === "objectives" || x.type === "comment" || L ? "disabled" : ""}> Baseline column</label><p class="note">Recorded once, at the start of the year.</p></div></div>
       <p class="note">${TYPES[x.type].help}</p><div class="grid3">`;
-    if (x.type === "score" || x.type === "rubric") h += f("max", "Maximum mark", x.max) + f("below", "Below if under", x.below) + f("above", "Above from", x.above);
+    if (x.type === "score" || x.type === "rubric") h += f("max", "Maximum mark", x.max, dis) + f("below", "Below if under", x.below) + f("above", "Above from", x.above);
     if (x.type === "standardised") h += f("below", "Below if under", x.below) + f("above", "Above from", x.above);
     if (x.type === "readingAge") h += f("below", "Below if under (years)", x.below) + f("above", "Above if over (years)", x.above);
     if (x.type === "objectives") h += f("belowPct", "Below if secure is under (%)", x.belowPct) + f("abovePct", "Above if exceeding is at least (%)", x.abovePct);
     h += `</div>`;
-    if (x.type === "list") h += `<label for="${x.id}-opt">Options, lowest first, one per line</label><textarea id="${x.id}-opt" data-colf="options" data-col="${x.id}">${esc(x.options.join("\n"))}</textarea>
+    if (x.type === "list") h += `<label for="${x.id}-opt">Options, lowest first, one per line</label><textarea id="${x.id}-opt" data-colf="options" data-col="${x.id}" ${dis}>${esc(x.options.join("\n"))}</textarea>
       <div class="grid3"><div><label for="${x.id}-lb">First option in line</label><select id="${x.id}-lb" data-colf="below" data-col="${x.id}">${x.options.map((o, i) => `<option value="${i}" ${i === x.below ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></div>
       <div><label for="${x.id}-la">First option above</label><select id="${x.id}-la" data-colf="above" data-col="${x.id}">${x.options.map((o, i) => `<option value="${i}" ${i === x.above ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></div></div>`;
     if (x.type === "objectives") {
@@ -132,7 +136,7 @@
         C.terms.forEach((t, i) => h += `<label for="${x.id}-o${i}">${esc(g.name)}, ${esc(t)}</label><textarea id="${x.id}-o${i}" data-colobj="${i}" data-grade="${g.id}" data-col="${x.id}">${esc((per[i] || []).map(o => o.text + (o.step ? " | " + o.step : "")).join("\n"))}</textarea>`);
       }
     }
-    h += `<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost small" data-act="del-col" data-id="${x.id}">Remove column</button></div></div>`;
+    h += `<div class="row" style="justify-content:space-between;margin-top:8px">${L ? `<span class="note" style="color:var(--amber);font-weight:700">Locked: teachers have recorded data in this column. You can still rename it${x.type === "list" ? "" : " and change its thresholds"}.</span>` : "<span></span>"}<button class="btn ghost small" data-act="del-col" data-id="${x.id}" ${dis}>Remove column</button></div></div>`;
     return h;
   }
 
@@ -147,7 +151,7 @@
       <label for="s-terms">Terms or checkpoints, one per line, in order</label><textarea id="s-terms" data-cfg="terms">${esc(C.terms.join("\n"))}</textarea>
       <p class="note">For example Term 1, Term 2, Term 3, or Semester 1, Semester 2.</p></div>`;
     if (ui.step === 1) h += `<div class="card"><h2>Grades</h2><p class="note">The grades or year groups in your school, youngest first. Curriculum objectives are added for each grade.</p>
-      ${C.grades.map(g => `<div class="row" style="margin:6px 0"><input type="text" aria-label="Grade name" data-gname="${g.id}" value="${esc(g.name)}" style="flex:1"><button class="btn ghost small" data-act="del-grade" data-id="${g.id}">Remove</button></div>`).join("")}
+      ${C.grades.map(g => `<div class="row" style="margin:6px 0"><input type="text" aria-label="Grade name" data-gname="${g.id}" value="${esc(g.name)}" style="flex:1"><button class="btn ghost small" data-act="del-grade" data-id="${g.id}" ${GRADES_USED.has(g.id) ? 'disabled title="Classes use this grade"' : ""}>Remove</button></div>`).join("")}
       <p><button class="btn ghost small" data-act="add-grade">Add grade</button></p></div>`;
     if (ui.step === 2) h += `<div class="card"><h2>Grading system</h2><p class="note">Write your own grading system, lowest level first. Each level starts at a percentage, and you choose what each level means against grade-level expectations.</p>
       <div class="row" style="margin:10px 0"><span class="note"><b>Start from</b></span><button class="btn ghost small" data-act="grade-ajman">1 to 7 (45% to 100%)</button><button class="btn ghost small" data-act="grade-four">Emerging to Exceeding</button></div>
@@ -163,8 +167,8 @@
     if (ui.step === 3) {
       h += `<div class="card"><h2>Subjects and strands</h2><p class="note">Split a subject into strands to track them separately, such as English into reading, writing, spelling, and speaking and listening. A subject with no split needs one strand with the same name.</p>`;
       C.subjects.forEach(sb => {
-        h += `<div class="colcard"><div class="row"><input type="text" aria-label="Subject name" data-sub="${sb.id}" value="${esc(sb.name)}" style="flex:1;font-weight:700"><button class="btn ghost small" data-act="del-sub" data-id="${sb.id}">Remove subject</button></div>`;
-        sb.strands.forEach(st => h += `<div class="row" style="margin:6px 0 0 18px"><input type="text" aria-label="Strand name" data-strand="${st.id}" value="${esc(st.name)}" style="flex:1"><span class="note">${st.cols.length} columns</span><button class="btn ghost small" data-act="del-str" data-id="${st.id}">Remove</button></div>`);
+        h += `<div class="colcard"><div class="row"><input type="text" aria-label="Subject name" data-sub="${sb.id}" value="${esc(sb.name)}" style="flex:1;font-weight:700"><button class="btn ghost small" data-act="del-sub" data-id="${sb.id}" ${sb.strands.some(strandLocked) ? 'disabled title="Data has been recorded"' : ""}>Remove subject</button></div>`;
+        sb.strands.forEach(st => h += `<div class="row" style="margin:6px 0 0 18px"><input type="text" aria-label="Strand name" data-strand="${st.id}" value="${esc(st.name)}" style="flex:1"><span class="note">${st.cols.length} columns</span><button class="btn ghost small" data-act="del-str" data-id="${st.id}" ${strandLocked(st) ? 'disabled title="Data has been recorded"' : ""}>Remove</button></div>`);
         h += `<p style="margin:8px 0 0 18px"><button class="btn ghost small" data-act="add-str" data-id="${sb.id}">Add strand</button></p></div>`;
       });
       h += `<button class="btn ghost" data-act="add-sub">Add subject</button></div>`;
@@ -252,7 +256,13 @@
       const x = findCol(t.dataset.col), i = +t.dataset.colobj, g = t.dataset.grade;
       const per = x.objectives[g] = x.objectives[g] || []; while (per.length < C.terms.length) per.push([]);
       const old = per[i] || [];
-      per[i] = lines(t.value).map((l, j) => { const [a, ...b] = l.split("|"); return { id: old[j] ? old[j].id : uid("o"), text: a.trim(), step: b.join("|").trim() }; });
+      const parsed = lines(t.value).map(l => { const [a, ...b] = l.split("|"); return { text: a.trim(), step: b.join("|").trim() }; });
+      const taken = new Set(), newTexts = new Set(parsed.map(p => p.text.toLowerCase()));
+      parsed.forEach(p => { const m = old.find(o => !taken.has(o.id) && o.text.toLowerCase() === p.text.toLowerCase()); if (m) { p.id = m.id; taken.add(m.id); } });
+      parsed.forEach((p, j) => { if (p.id) return; const o = old[j]; if (o && !taken.has(o.id) && !newTexts.has(o.text.toLowerCase())) { p.id = o.id; taken.add(o.id); } else p.id = uid("o"); });
+      const lost = old.filter(o => !taken.has(o.id) && USED.obj.has(o.id));
+      if (lost.length && !confirm(`Teachers have recorded data for ${lost.length === 1 ? "this objective" : "these objectives"}:\n\n${lost.map(o => "• " + o.text).join("\n")}\n\nIf you remove ${lost.length === 1 ? "it" : "them"}, the data is kept but no longer shown. Remove anyway?`)) { render(); return; }
+      per[i] = parsed;
     }
     save();
     if (structural) render();
@@ -266,6 +276,9 @@
       const { data, error } = await ctx.sb.from("school_setups").select("*").eq("school_id", ctx.school.id).order("updated_at", { ascending: false }).limit(1);
       if (error) { ctx.el.innerHTML = `<div class="card"><div class="msg err">${esc(error.message)}</div></div>`; return; }
       row = data[0] || null; saveState = "";
+      USED = { col: new Set(), obj: new Set(), strand: new Set() }; GRADES_USED = new Set();
+      const u = await ctx.sb.rpc("used_ids"); if (!u.error) (u.data || []).forEach(r => USED[r.kind] && USED[r.kind].add(r.id));
+      const g = await ctx.sb.from("classes").select("grade_id").eq("school_id", ctx.school.id); if (!g.error) g.data.forEach(r => GRADES_USED.add(r.grade_id));
       if (!bound) { document.addEventListener("click", onClick); document.addEventListener("change", onChange); bound = true; }
       if (!row) return chooseTemplate();
       C = row.config; if (!C.year) C.year = row.year; render();
