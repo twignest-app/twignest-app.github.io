@@ -95,11 +95,10 @@
 
   function render() {
     const t = ui.term, list = filtered("All"), grades = C.grades || [];
-    let h = `<div class="row" style="justify-content:flex-end;margin-bottom:6px"><button class="btn ghost small" data-supload="1">Upload results for the whole school</button></div><div class="row" style="margin-bottom:10px"><button class="pill2" data-smode="subject" aria-pressed="${ui.mode === "subject"}">By subject (overall)</button><button class="pill2" data-smode="strand" aria-pressed="${ui.mode === "strand"}">By strand (detail)</button>
-      <label class="note" for="svGrade" style="margin-left:8px"><b>Grade</b></label><select id="svGrade" style="width:auto"><option value="All">All grades</option>${grades.map(g => `<option value="${g.id}" ${g.id === ui.grade ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select></div>
-      <div class="row" style="margin-bottom:8px">${C.terms.map((x, i) => `<button class="chip" data-sterm="${i}" aria-pressed="${i === t}">${esc(x)}</button>`).join("")}</div>
-      <div class="row" style="margin-bottom:14px">${["All", ...(C.groups || [])].map(g => `<button class="chip" data-sgrp="${esc(g)}" aria-pressed="${g === ui.group}">${g === "All" ? "All students" : esc(g)}</button>`).join("")}</div>`;
-    h = h.replace('<button class="pill2" data-smode="strand"', `<button class="pill2" data-smode="reports" aria-pressed="${ui.mode === "reports"}">Report comments</button><button class="pill2" data-smode="strand"`);
+    const sel = (id, label, opts, cur) => `<label class="fl" for="${id}">${label}</label><select id="${id}" class="fsel">${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    if (ctx.fixedMode) ui.mode = ctx.fixedMode; else if (ui.mode === "reports") ui.mode = "subject";
+    let h = (ctx.fixedMode ? "" : `<div class="tabs2" role="tablist"><button role="tab" data-smode="subject" aria-selected="${ui.mode === "subject"}">By subject</button><button role="tab" data-smode="strand" aria-selected="${ui.mode === "strand"}">By strand</button></div>`)
+      + `<div class="fbar">${sel("svGrade", "Grade", [["All", "All grades"], ...grades.map(g => [g.id, g.name])], ui.grade)}${sel("svTerm", "Term", C.terms.map((x, i) => [i, x]), t)}${sel("svGrp", "Students", [["All", "All students"], ...(C.groups || []).map(g => [g, g])], ui.group)}</div>`;
     if (!list.length) { ctx.el.innerHTML = h + `<div class="card"><p class="note">No students match these filters yet.</p></div>`; return; }
     if (ui.mode === "reports") { ctx.el.innerHTML = h + reportsTracker(list); return; }
     if (ui.mode === "subject") {
@@ -151,14 +150,15 @@
       <div class="sheetwrap" style="margin-top:14px"><table class="sheet"><thead><tr><th style="text-align:left">Class</th>${C.subjects.map(sb => `<th>${esc(sb.name)}</th>`).join("")}<th>Overall</th></tr></thead><tbody>${rows}</tbody></table></div>
       <p class="note">Each subject counts one comment per strand for every student. Names under a subject are its specialist teachers.</p>`;
   }
-  function onClick(e) { const b = e.target.closest("button"); if (!b || !ctx || !ctx.el.contains(b)) return;
-    if (b.dataset.supload) return TNResults.open({ sb: ctx.sb, C, scopeText: "For the whole school. Include a Class column if two students share the same name.", limitClass: null,
+  function upload() { if (!C) return; TNResults.open({ sb: ctx.sb, C, scopeText: "For the whole school. Include a Class column if two students share the same name.", limitClass: null,
       students: studs.map(x => ({ ...x, class_name: (clsOf(x) || {}).name })), existing: (sid, cid, k) => val(sid, cid, k),
-      onDone: async n => { await load(); render(); ctx.el.insertAdjacentHTML("afterbegin", `<div class="msg ok" style="margin-bottom:10px">Saved ${n} result${n === 1 ? "" : "s"}.</div>`); } });
+      onDone: async n => { await load(); render(); ctx.el.insertAdjacentHTML("afterbegin", `<div class="msg ok" style="margin-bottom:10px">Saved ${n} result${n === 1 ? "" : "s"}.</div>`); } }); }
+  function onClick(e) { const b = e.target.closest("button"); if (!b || !ctx || !ctx.el.contains(b)) return;
     if (b.dataset.smode) { ui.mode = b.dataset.smode; render(); window.scrollTo(0, 0); }
     if (b.dataset.sterm) { ui.term = +b.dataset.sterm; render(); }
     if (b.dataset.sgrp) { ui.group = b.dataset.sgrp; render(); } }
-  function onChange(e) { if (e.target.id === "svGrade" && ctx && ctx.el.contains(e.target)) { ui.grade = e.target.value; render(); } }
+  function onChange(e) { const t = e.target; if (!ctx || !ctx.el.contains(t)) return;
+    if (t.id === "svGrade") { ui.grade = t.value; render(); } if (t.id === "svTerm") { ui.term = +t.value; render(); } if (t.id === "svGrp") { ui.group = t.value; render(); } }
 
   window.TNSchool = {
     async open(context) {
@@ -166,6 +166,7 @@
       ctx.el.innerHTML = `<div class="card"><p class="note">Loading the school view…</p></div>`;
       try { await load(); render(); } catch (err) { ctx.el.innerHTML = `<div class="card"><div class="msg err">${esc(err.message || err)}</div></div>`; }
     },
+    upload,
     close() { ctx = null; }
   };
 })();

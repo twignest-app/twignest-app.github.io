@@ -123,7 +123,13 @@
       h += `<td>${ov ? `<b>${esc(lab(ov.lv))}</b> ${badge(ov.band, POS[ov.band])}` : "–"}</td><td>${pr ? badge(pr.band, signed(pr.steps) + " · " + PROG[pr.band]) : "–"}</td>
         <td>${tr.n ? badge(tr.ok === tr.n ? "inline" : tr.ok >= tr.n / 2 ? "none" : "below", `${tr.ok} of ${tr.n}`) : "–"}</td><td>${gp ? badge(gp > 4 ? "below" : "none", gp) : badge("inline", "0")}</td></tr>`;
     });
-    ctx.el.innerHTML = head + `<div class="sheetwrap"><table class="sheet">${h}</tbody></table></div><p class="note">Levels are the average of each subject’s strands. Tap a name for the full year, gaps and next steps.</p>`;
+    const vs = visible(); let okN = 0, known = 0, progN = 0, pk = 0, need = 0;
+    vs.forEach(x => { const ov = avgEval(x.id, all, k), pr = avgProgress(x.id, all, t), tr = trackCount(x.id, all, t);
+      if (ov && ov.band !== "none") { known++; if (ov.band !== "below") okN++; } if (pr) { pk++; if (pr.band !== "below") progN++; }
+      if ((ov && ov.band === "below") || (tr.n && tr.ok < tr.n / 2)) need++; });
+    const m = (l, v, sub) => `<div class="metric"><span>${l}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
+    ctx.el.innerHTML = head + `<div class="metrics">${m("In line or above", known ? `${okN} of ${known}` : "–", "against grade level")}${m("Expected progress", pk ? Math.round(progN / pk * 100) + "%" : "–", "or better since baseline")}${m("Need support", need, "below or not on track")}</div>
+      <div class="sheetwrap"><table class="sheet">${h}</tbody></table></div><p class="note">Levels are the average of each subject’s strands. Tap a name for the full year, gaps and next steps.</p>`;
   }
   function openProfile(sid) {
     ui.pid = sid; const s = studs.find(x => x.id === sid), t = ui.term, k = String(t), all = allStrands();
@@ -316,15 +322,18 @@
     const [, st] = findStrand(ui.strand), t = ui.term, k = String(t);
     const bc = st.cols.filter(c => c.baseline), tc = st.cols.filter(c => !c.baseline);
     let n = 0; tc.forEach(c => { n += c.type === "objectives" ? objs(c, t).length : 1; });
-    let h = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="row"><button class="btn ghost small" data-sh="back">← Back</button>${ctx.siblings && ctx.siblings.length > 1 ? `<select id="shCls" aria-label="Switch class" style="width:auto;font-family:Poppins,sans-serif;font-weight:600;font-size:18px;color:var(--plum);padding:4px 10px">${ctx.siblings.map(x => `<option value="${x.id}" ${x.id === cls.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<h2 style="margin:0;font-family:Poppins,sans-serif;color:var(--plum)">${esc(cls.name)}</h2>`}${ctx.subjects ? `<span class="tag">${esc(C.subjects.map(x => x.name).join(", "))}</span>` : ""}<span class="note">${studs.length} students</span></div><div class="row">${role() === "checker" ? "" : `<button class="btn ghost small" data-sh="upload">Upload results from Excel</button>`}<span class="note" id="shSave">All changes saved</span></div></div>
-      <div class="row" style="margin-bottom:10px">${role() === "checker" ? "" : `<button class="pill2" data-mode="overview" aria-pressed="${ui.mode === "overview"}">Class overview</button><button class="pill2" data-mode="strand" aria-pressed="${ui.mode === "strand"}">Record data by strand</button>`}<button class="pill2" data-mode="reports" aria-pressed="${ui.mode === "reports"}">Report comments</button></div>
-      <div class="row" style="margin-bottom:10px">${ui.mode === "strand" ? `<label class="note" for="shSub"><b>Subject</b></label><select id="shSub" style="width:auto">${subs.map(s => `<option value="${s.id}" ${s.id === ui.sub ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
-      <label class="note" for="shStr"><b>Strand</b></label><select id="shStr" style="width:auto">${sb.strands.map(s => `<option value="${s.id}" ${s.id === ui.strand ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>` : ""}
-      ${C.terms.map((x, i) => `<button class="chip" data-term="${i}" aria-pressed="${i === t}">${esc(x)}</button>`).join("")}</div>
-      <div class="row" style="margin-bottom:10px">${["All", ...(C.groups || [])].map(g => `<button class="chip" data-grp="${esc(g)}" aria-pressed="${g === ui.group}">${g === "All" ? "All students" : esc(g)}</button>`).join("")}</div>
+    if (role() === "checker") ui.mode = "reports";
+    const tabs = role() === "checker" ? [["reports", "Report comments"]] : [["overview", "Overview"], ["strand", "Enter data"], ["reports", "Report comments"]];
+    const sel = (id, label, opts, cur) => `<label class="fl" for="${id}">${label}</label><select id="${id}" class="fsel">${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    let h = `<div class="crumb"><button class="crumbbtn" data-sh="back">${esc(ctx.crumb || "Class sheets")}</button> <span aria-hidden="true">›</span> ${esc(cls.name)}</div>
+      <div class="phead"><div><h1 class="ptitle">${ctx.siblings && ctx.siblings.length > 1 ? `<select id="shCls" aria-label="Switch class" class="titlesel">${ctx.siblings.map(x => `<option value="${x.id}" ${x.id === cls.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : esc(cls.name)}</h1>
+        <p class="psub">${esc(ctx.gradeName || "")}${ctx.gradeName ? ", " : ""}${studs.length} student${studs.length === 1 ? "" : "s"}${ctx.subjects ? ` · <span class="tag">${esc(C.subjects.map(x => x.name).join(", "))}</span>` : ""}</p></div>
+        <div class="row">${role() === "checker" ? "" : `<button class="btn ghost small" data-sh="upload">Upload results</button>`}<span class="note" id="shSave">All changes saved</span></div></div>
+      <div class="tabs2" role="tablist">${tabs.map(([m, l]) => `<button role="tab" data-mode="${m}" aria-selected="${ui.mode === m}">${l}</button>`).join("")}</div>
+      <div class="fbar">${sel("shTerm", "Term", C.terms.map((x, i) => [i, x]), t)}${sel("shGrp", "Students", [["All", "All students"], ...(C.groups || []).map(g => [g, g])], ui.group)}
+        ${ui.mode === "strand" ? sel("shSub", "Subject", subs.map(x => [x.id, x.name]), ui.sub) + sel("shStr", "Strand", sb.strands.map(x => [x.id, x.name]), ui.strand) : ""}</div>
       <div class="legend"><span><i class="dot" style="width:18px;height:18px"></i>Not assessed</span><span><i class="dot s" style="width:18px;height:18px"></i>Secure</span><span><i class="dot n" style="width:18px;height:18px"></i>Not yet secure</span><span><i class="dot e" style="width:18px;height:18px"></i>Exceeding</span><span>Scores are shaded ${badge("below", "below")} ${badge("inline", "in line")} ${badge("above", "above")}</span></div>`;
     if (!studs.length) { ctx.el.innerHTML = h + `<div class="card"><p class="note">This class has no students yet. The school lead adds them in Classes and students.</p></div>`; return; }
-    if (role() === "checker") ui.mode = "reports";
     if (ui.mode === "overview") return renderOverview(h.replace(/<div class="legend">[\s\S]*$/, ""));
     if (ui.mode === "reports") return renderReports(h.replace(/<div class="legend">[\s\S]*$/, ""));
     let th = `<thead><tr><th class="namecol"></th><th class="grp" colspan="${bc.length + 1}">Baseline</th><th class="grp" colspan="${n || 1}">${esc(C.terms[t])}</th><th class="grp" colspan="3">Summary</th></tr><tr><th class="namecol">Student</th>`;
@@ -390,6 +399,8 @@
   async function onChange(e) {
     const t = e.target; if (!ctx || !ctx.el.contains(t)) return;
     if (t.id === "shCls") { const nc = ctx.siblings.find(x => x.id === t.value); return TNSheet.open(Object.assign({}, ctx, { cls: nc })); }
+    if (t.id === "shTerm") { ui.term = +t.value; return render(); }
+    if (t.id === "shGrp") { ui.group = t.value; return render(); }
     if (t.id === "shSub") { ui.sub = t.value; ui.strand = null; return render(); }
     if (t.id === "shStr") { ui.strand = t.value; return render(); }
     if (t.dataset.taught) {

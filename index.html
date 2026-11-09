@@ -114,15 +114,35 @@ dialog#tnProfile::backdrop{background:rgba(40,25,60,.45)}.dlg{padding:20px 22px}
 .navtabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
 .navtabs button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 16px;font-weight:700;cursor:pointer;font-family:"Poppins","Nunito",sans-serif}
 .navtabs button[aria-pressed="true"]{background:var(--plum);color:#fff;border-color:var(--plum)}
+#shell{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
+body.auth #shell{display:block}body.auth #side{display:none}
+#side{background:var(--card);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;gap:3px;position:sticky;top:0;height:100vh;overflow-y:auto}
+#side .logo{display:block;margin:0 8px 20px}#side .logo img{height:44px;width:auto}
+.nav{display:block;width:100%;border:0;background:none;padding:9px 12px;border-radius:10px;font:inherit;font-weight:700;color:var(--muted);cursor:pointer;text-align:left;font-size:15px}
+.nav:hover{background:var(--bg);color:var(--ink)}.nav[aria-current="page"]{background:var(--plum-soft);color:var(--plum)}
+.navlabel{font-size:12px;color:var(--muted);margin:18px 12px 4px;font-weight:700}
+.me{margin-top:auto;border-top:1px solid var(--line);padding:14px 8px 4px;font-size:13px;color:var(--muted)}.me b{display:block;color:var(--ink);font-size:14px}
+#app{max-width:1400px;width:100%;margin:0;padding:26px 30px 56px;box-sizing:border-box}
+.crumb{font-size:13px;color:var(--muted);margin-bottom:2px}.crumbbtn{border:0;background:none;padding:0;font:inherit;color:var(--plum);font-weight:700;cursor:pointer}.crumbbtn:hover{text-decoration:underline}
+.phead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:2px 0 16px;flex-wrap:wrap}
+h1.ptitle{margin:0;font-family:Poppins,Nunito,sans-serif;font-weight:600;font-size:26px;color:var(--ink);line-height:1.25}.psub{margin:3px 0 0;color:var(--muted);font-size:14px}
+.titlesel{font-family:Poppins,Nunito,sans-serif;font-weight:600;font-size:22px;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:2px 10px;background:var(--card);width:auto}
+.tabs2{display:flex;gap:24px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
+.tabs2 button{border:0;background:none;padding:10px 0;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px;font-size:15px;font-family:Poppins,Nunito,sans-serif;white-space:nowrap}
+.tabs2 button[aria-selected="true"]{color:var(--plum);border-bottom-color:var(--plum)}
+.fbar{display:flex;flex-wrap:wrap;gap:8px 8px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+label.fl{display:inline;font-size:13px;color:var(--muted);font-weight:700;margin:0 0 0 8px}label.fl:first-child{margin-left:0}select.fsel{width:auto;padding:7px 10px;font-size:14px}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:14px}
+.metric{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px}.metric span{display:block;font-size:13px;color:var(--muted);font-weight:700}
+.metric b{display:block;font-size:26px;color:var(--plum);font-family:Poppins,Nunito,sans-serif;font-weight:600;line-height:1.3}.metric small{display:block;color:var(--muted);font-size:12px}
+.todo{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px dashed var(--line);font-size:15px}.todo:last-child{border-bottom:0}
+@media (max-width:820px){#shell{display:block}#side{position:static;height:auto;flex-direction:row;overflow-x:auto;padding:8px 10px;gap:4px;align-items:center;border-right:0;border-bottom:1px solid var(--line)}
+#side .logo{margin:0 6px 0 0}#side .logo img{height:30px}.navlabel{display:none}.me{margin:0 0 0 auto;border:0;padding:0;white-space:nowrap}.me b,.me span{display:none}.nav{white-space:nowrap;padding:8px 10px;font-size:14px;width:auto}#app{padding:18px 14px 40px}}
 </style>
 </head>
 <body>
-<header>
-  <img src="logo.png" alt="TwigNest logo">
-  <h1>Twig<span>Nest</span></h1>
-  <div class="who" id="who"></div>
-</header>
-<main id="app"><p class="note">Loading…</p></main>
+<div id="shell"><aside id="side" aria-label="Main menu"></aside><main id="app"><p class="note">Loading…</p></main></div>
+<div id="who" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="setup.js"></script>
@@ -138,7 +158,7 @@ const app = document.getElementById("app"), who = document.getElementById("who")
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ROLES = {admin:"TwigNest admin", school_lead:"School lead", teacher:"Teacher", checker:"Buddy checker"};
 const here = location.origin + location.pathname;
-let authTab = "signin", recovering = false, leadTab = "sheets";
+let authTab = "signin", recovering = false;
 
 function friendly(e){
   const m = (e && (e.message || e.error_description)) || String(e);
@@ -203,11 +223,17 @@ function resetView(){
       recovering = false; render(); }); };
 }
 
-function header(p){
-  document.body.classList.remove("auth");
-  who.innerHTML = `<span>${esc(p.full_name || p.email)} · ${ROLES[p.role] || ""}</span><button class="btn ghost small" id="out">Sign out</button>`;
-  document.getElementById("out").onclick = async () => { await sb.auth.signOut(); authTab = "signin"; render(); };
+let page = "home";
+function header(p){ document.body.classList.remove("auth"); }
+function drawSide(p, items){
+  const side = document.getElementById("side");
+  side.innerHTML = `<a class="logo" href="#" data-go="home"><img src="logo.png" alt="TwigNest"></a>` + items.map(it => it[0] === "label" ? `<div class="navlabel">${esc(it[1])}</div>` : `<button class="nav" data-go="${it[0]}" ${page === it[0] ? 'aria-current="page"' : ""}>${esc(it[1])}</button>`).join("")
+    + `<div class="me"><b>${esc(p.full_name || p.email)}</b><span>${esc(ROLES[p.role] || "")}</span><div style="margin-top:8px"><button class="btn ghost small" id="out">Sign out</button></div></div>`;
+  side.querySelectorAll("[data-go]").forEach(b => b.onclick = e => { e.preventDefault(); go(b.dataset.go); });
+  document.getElementById("out").onclick = async () => { await sb.auth.signOut(); authTab = "signin"; page = "home"; render(); };
 }
+function go(pg){ page = pg; TNSheet.close(); TNSchool.close(); window.scrollTo(0, 0); render(); }
+function pageHead(title, sub, actions){ return `<div class="phead"><div><h1 class="ptitle">${title}</h1>${sub ? `<p class="psub">${sub}</p>` : ""}</div>${actions ? `<div class="row">${actions}</div>` : ""}</div>`; }
 
 function chooseView(p){
   app.innerHTML = `<div class="card"><h2>Welcome to TwigNest, ${esc((p.full_name||"").split(" ")[0])}</h2>
@@ -271,10 +297,12 @@ async function leadPanel(p, school){
     if (error) alert(friendly(error)); leadPanel(p, school); });
 }
 
+function addOut(){ const d = document.createElement("p"); d.style.textAlign = "center"; d.innerHTML = `<button class="btn ghost small" id="out2">Sign out</button>`; app.appendChild(d);
+  document.getElementById("out2").onclick = async () => { await sb.auth.signOut(); authTab = "signin"; page = "home"; render(); }; }
 function waitView(title, text){
   app.innerHTML = `<div class="narrow card" style="text-align:center"><img src="icon.png" alt="" style="width:120px;height:auto"><h2>${esc(title)}</h2><p class="note">${esc(text)}</p>
     <button class="btn ghost" id="chk">Check again</button></div>`;
-  document.getElementById("chk").onclick = render;
+  document.getElementById("chk").onclick = render; addOut();
 }
 
 async function render(){
@@ -284,32 +312,69 @@ async function render(){
   const { data: p, error } = await sb.from("profiles").select("*").eq("id", session.user.id).single();
   if (error || !p) { app.innerHTML = `<div class="card"><div class="msg err">We couldn’t load your account. Please sign out and try again.</div></div>`; return; }
   header(p);
-  if (p.role === "admin") return adminView();
-  if (!p.school_id) return chooseView(p);
+  if (p.role === "admin") { drawSide(p, [["home", "Schools"]]); return adminView(); }
+  if (!p.school_id) { document.body.classList.add("auth"); chooseView(p); return addOut(); }
   const { data: school } = await sb.from("schools").select("*").eq("id", p.school_id).single();
+  const pre = !school || school.status !== "approved" || !p.active;
+  if (pre) document.body.classList.add("auth");
   if (!school) return waitView("Almost there", "We couldn’t find your school. Please contact TwigNest.");
   if (school.status === "pending") return waitView(`${school.name} is waiting for approval`, "TwigNest will review your school soon. You’ll be able to set it up as soon as it’s approved.");
   if (school.status === "suspended") return waitView("Access paused", `${school.name}’s access to TwigNest is paused. Please contact TwigNest.`);
   if (!p.active) return waitView("Waiting for your school lead", `You’ve joined ${school.name}. Your school lead needs to approve your account before you can start.`);
-  if (p.role === "school_lead") {
-    app.innerHTML = `<div class="navtabs" role="group" aria-label="Sections"><button data-lt="sheets" aria-pressed="${leadTab==="sheets"}">Class sheets</button><button data-lt="school" aria-pressed="${leadTab==="school"}">School view</button><button data-lt="setup" aria-pressed="${leadTab==="setup"}">School setup</button><button data-lt="classes" aria-pressed="${leadTab==="classes"}">Classes and students</button><button data-lt="staff" aria-pressed="${leadTab==="staff"}">Staff and school code</button></div><div id="leadBody"></div>`;
-    app.querySelectorAll("[data-lt]").forEach(b => b.onclick = () => { leadTab = b.dataset.lt; render(); });
-    const body = document.getElementById("leadBody");
-    if (leadTab === "setup") return TNSetup.open({ sb, school, profile: p, el: body });
-    if (leadTab === "classes") return TNClasses.open({ sb, school, profile: p, el: body });
-    if (leadTab === "sheets") return classList(school, null, body);
-    if (leadTab === "school") return TNSchool.open({ sb, school, el: body });
-    body.innerHTML = `<div class="grid2"><div class="card"><h2>Your school code</h2><p class="note">Give this code to your teachers. They create an account, choose “Join my school” and enter it. You then approve them below.</p><div class="code">${esc(school.join_code)}</div></div></div>
-      <div class="card"><h2>Staff</h2><p class="note">Approve teachers who have joined and choose their role.</p><div id="members" class="tablewrap"><p class="note">Loading…</p></div></div>`;
-    return leadPanel(p, school);
-  }
-  const { data: setups } = await sb.from("school_setups").select("status,year").eq("school_id", school.id).order("updated_at", { ascending: false }).limit(1);
-  const ready = setups && setups[0] && setups[0].status === "live";
-  app.innerHTML = `<div class="card"><h2>${esc(school.name)}</h2><p class="note">Welcome, ${esc((p.full_name||"").split(" ")[0])}. ${ready ? `Your school’s setup for ${esc(setups[0].year)} is ready. ` : "Your school lead is still setting up TwigNest. Your classes will appear here once it’s ready."}</p></div>`;
-  if (ready) { const box = document.createElement("div"); app.appendChild(box); if (p.role === "checker") classList(school, null, box, "checker"); else classList(school, p.id, box); }
+  const items = p.role === "school_lead"
+    ? [["home", "Home"], ["sheets", "Class sheets"], ["school", "School view"], ["reports", "Report progress"], ["label", "School settings"], ["setup", "Setup"], ["classes", "Classes and students"], ["staff", "Staff"]]
+    : p.role === "checker" ? [["home", "Home"], ["sheets", "Reports to check"]] : [["home", "Home"], ["sheets", "My classes"]];
+  if (!items.some(i => i[0] === page)) page = "home";
+  drawSide(p, items);
+  const lead = p.role === "school_lead", sub = el => el;
+  if (page === "home") return homeView(p, school);
+  if (page === "sheets") return classList(school, lead || p.role === "checker" ? null : p.id, app, p.role === "checker" ? "checker" : undefined);
+  if (page === "school") { app.innerHTML = pageHead("School view", "Attainment, progress and coverage across the school.", `<button class="btn ghost small" id="svUp">Upload results for the whole school</button>`) + `<div id="pbody"></div>`;
+    document.getElementById("svUp").onclick = () => TNSchool.upload(); return TNSchool.open({ sb, school, el: document.getElementById("pbody") }); }
+  if (page === "reports") { app.innerHTML = pageHead("Report progress", "How far each class has got with report comments.") + `<div id="pbody"></div>`; return TNSchool.open({ sb, school, el: document.getElementById("pbody"), fixedMode: "reports" }); }
+  if (page === "setup") { app.innerHTML = `<div id="pbody"></div>`; return TNSetup.open({ sb, school, profile: p, el: document.getElementById("pbody") }); }
+  if (page === "classes") { app.innerHTML = pageHead("Classes and students", "Create classes, choose their teachers and add students.") + `<div id="pbody"></div>`; return TNClasses.open({ sb, school, profile: p, el: document.getElementById("pbody") }); }
+  if (page === "staff") { app.innerHTML = pageHead("Staff", "Approve teachers who join, and choose their role.") + `<div class="grid2"><div class="card"><h2>Your school code</h2><p class="note">Give this code to your teachers. They create an account, choose “Join my school” and enter it. You then approve them below.</p><div class="code">${esc(school.join_code)}</div></div></div>
+      <div class="card"><h2>Staff</h2><div id="members" class="tablewrap"><p class="note">Loading…</p></div></div>`; return leadPanel(p, school); }
 }
 
-async function classList(school, teacherId, el, role){
+async function homeView(p, school){
+  const first = (p.full_name || "").split(" ")[0], hr = new Date().getHours(), greet = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
+  app.innerHTML = pageHead(`${greet}, ${esc(first)}`, esc(school.name)) + `<p class="note">Loading…</p>`;
+  const count = async q => { const { count: c } = await q; return c || 0; };
+  const { data: setups } = await sb.from("school_setups").select("status,year").eq("school_id", school.id).order("updated_at", { ascending: false }).limit(1);
+  const setup = setups && setups[0], todo = [], item = (text, goTo, btn) => todo.push(`<div class="todo"><span>${text}</span><button class="btn ghost small" data-go="${goTo}">${btn}</button></div>`);
+  let metrics = "";
+  if (p.role === "school_lead") {
+    const [nc, ns, nst, np, nr, nch] = await Promise.all([
+      count(sb.from("classes").select("id", { count: "exact", head: true }).eq("school_id", school.id)),
+      count(sb.from("students").select("id", { count: "exact", head: true }).eq("school_id", school.id).eq("archived", false)),
+      count(sb.from("profiles").select("id", { count: "exact", head: true }).eq("school_id", school.id).eq("active", true)),
+      count(sb.from("profiles").select("id", { count: "exact", head: true }).eq("school_id", school.id).eq("active", false)),
+      count(sb.from("report_comments").select("student_id", { count: "exact", head: true }).eq("status", "ready")),
+      count(sb.from("report_comments").select("student_id", { count: "exact", head: true }).eq("status", "changes"))]);
+    if (!setup) item("Set up your school: terms, grading, subjects and what teachers record.", "setup", "Start setup");
+    else if (setup.status !== "live") item("Finish your school setup and mark it ready for teachers.", "setup", "Open setup");
+    if (setup && !nc) item("Add your classes and students.", "classes", "Add classes");
+    if (np) item(`${np} staff member${np === 1 ? " is" : "s are"} waiting for your approval.`, "staff", "Review staff");
+    if (nr) item(`${nr} report comment${nr === 1 ? " is" : "s are"} waiting for a buddy check.`, "reports", "See progress");
+    if (nch) item(`${nch} report comment${nch === 1 ? " was" : "s were"} returned to teachers for changes.`, "reports", "See progress");
+    const m = (l, v) => `<div class="metric"><span>${l}</span><b>${v}</b></div>`;
+    metrics = `<div class="metrics">${m("Classes", nc)}${m("Students", ns)}${m("Staff", nst)}</div>`;
+  } else if (setup && setup.status === "live") {
+    if (p.role === "checker") { const nr = await count(sb.from("report_comments").select("student_id", { count: "exact", head: true }).eq("status", "ready"));
+      if (nr) item(`${nr} report comment${nr === 1 ? " is" : "s are"} waiting for your check.`, "sheets", "Start checking"); }
+    else { const nch = await count(sb.from("report_comments").select("student_id", { count: "exact", head: true }).eq("status", "changes"));
+      if (nch) item(`${nch} of your report comment${nch === 1 ? " was" : "s were"} returned with a note from the checker.`, "sheets", "Open my classes"); }
+  }
+  const ready = setup && setup.status === "live";
+  app.innerHTML = pageHead(`${greet}, ${esc(first)}`, esc(school.name)) + metrics
+    + `<div class="card"><h2>To do</h2>${!ready && p.role !== "school_lead" ? `<p class="note">Your school lead is still setting up TwigNest. Your classes will appear here once it’s ready.</p>` : todo.length ? todo.join("") : `<p class="ok">You’re all up to date.</p>`}</div><div id="homeClasses"></div>`;
+  app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
+  if (ready && p.role !== "school_lead") classList(school, p.role === "checker" ? null : p.id, document.getElementById("homeClasses"), p.role === "checker" ? "checker" : undefined, { head: false });
+}
+
+async function classList(school, teacherId, el, role, opts = { head: true }){
   const { data: setups } = await sb.from("school_setups").select("year,config").eq("school_id", school.id).order("updated_at", { ascending: false }).limit(1);
   if (!setups || !setups.length) { el.innerHTML = `<div class="card"><h2>Class sheets</h2><p class="note">Finish the school setup first.</p></div>`; return; }
   const year = setups[0].year, grades = setups[0].config.grades || [];
@@ -331,9 +396,12 @@ async function classList(school, teacherId, el, role){
     [...new Set(links.filter(l => l.subject_id).map(l => l.subject_id))].forEach(sid => { const sb2 = subjects.find(x => x.id === sid); if (!sb2) return;
       groups.push({ title: `My ${sb2.name} classes`, note: `You see only ${sb2.name} in these classes. Use the class name at the top of the sheet to switch quickly between classes.`, list: cls.filter(c => links.some(l => l.class_id === c.id && l.subject_id === sid)), subjects: [sid] }); });
   }
-  el.innerHTML = groups.map((g, gi) => `<div class="card"><h2>${esc(g.title)}, ${esc(year)}</h2><p class="note">${g.note}</p><div class="grid2" style="margin-top:12px">${g.list.map(c => btn(c, gi + "|" + c.id)).join("")}</div></div>`).join("");
+  const top = opts.head ? pageHead(teacherId ? "My classes" : role === "checker" ? "Reports to check" : "Class sheets", esc(year)) : "";
+  el.innerHTML = top + groups.map((g, gi) => `<div class="card"><h2>${esc(g.title)}</h2><p class="note">${g.note}</p><div class="grid2" style="margin-top:12px">${g.list.map(c => btn(c, gi + "|" + c.id)).join("")}</div></div>`).join("");
   el.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { const [gi, id] = b.dataset.open.split("|"), g = groups[+gi], c = g.list.find(x => x.id === id);
-    TNSheet.open({ sb, cls: c, el, role, subjects: g.subjects, siblings: g.list, schoolName: school.name, back: () => { TNSheet.close(); classList(school, teacherId, el, role); } }); });
+    const host = opts.head ? el : app;
+    TNSheet.open({ sb, cls: c, el: host, role, subjects: g.subjects, siblings: g.list, schoolName: school.name, gradeName: gname(c.grade_id), crumb: opts.head ? (teacherId ? "My classes" : role === "checker" ? "Reports to check" : "Class sheets") : "Home",
+      back: () => { TNSheet.close(); if (opts.head) classList(school, teacherId, el, role, opts); else render(); } }); });
 }
 
 sb.auth.onAuthStateChange((event) => {

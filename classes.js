@@ -89,7 +89,7 @@
     const el = ctx.el;
     if (!setup) { el.innerHTML = `<div class="card"><h2>Classes and students</h2><p class="note">Finish the school setup first, so TwigNest knows your grades and student groups.</p></div>`; return; }
     const grades = setup.config.grades || [];
-    let h = `<div class="card"><h2>Classes and students, ${esc(setup.year)}</h2><p class="note">Add each class, choose its teachers, then add its students. You can paste student names straight from Excel.</p>
+    let h = `<div class="card"><h2>Add a class</h2><p class="note">For ${esc(setup.year)}. Add each class, choose its teachers, then add its students. You can paste names straight from Excel.</p>
       <div class="row" style="margin-top:12px"><select id="newGrade" aria-label="Grade">${grades.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select>
       <input id="newClass" type="text" placeholder="Class name, for example 2A" aria-label="Class name" style="max-width:260px"><button class="btn" data-cact="add-class">Add class</button></div><div id="cMsg"></div>
       <h3>Or upload a whole-school list</h3><p class="note">Upload an Excel or CSV file with the columns <b>Name</b>, <b>Class</b>, <b>Grade</b> and <b>Groups</b>. TwigNest creates any missing classes and shows you a preview before anything is saved.</p>
