@@ -252,7 +252,7 @@
       sb.from("students").select("*").eq("class_id", cls.id).eq("archived", false).order("full_name")]);
     if (s.error || st.error) throw (s.error || st.error);
     if (!s.data.length) throw new Error("This school’s setup for " + cls.year + " couldn’t be found.");
-    C = s.data[0].config; studs = st.data;
+    C = s.data[0].config; if (ctx.subjects) C = Object.assign({}, C, { subjects: C.subjects.filter(x => ctx.subjects.includes(x.id)) }); studs = st.data;
     const ids = studs.map(x => x.id);
     R = {}; ST = {}; LV = {}; TAUGHT = new Set();
     const tg = await sb.from("taught").select("obj_id").eq("class_id", cls.id);
@@ -296,7 +296,7 @@
     const [, st] = findStrand(ui.strand), t = ui.term, k = String(t);
     const bc = st.cols.filter(c => c.baseline), tc = st.cols.filter(c => !c.baseline);
     let n = 0; tc.forEach(c => { n += c.type === "objectives" ? objs(c, t).length : 1; });
-    let h = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="row"><button class="btn ghost small" data-sh="back">← Back</button><h2 style="margin:0;font-family:Poppins,sans-serif;color:var(--plum)">${esc(cls.name)}</h2><span class="note">${studs.length} students</span></div><div class="row">${role() === "checker" ? "" : `<button class="btn ghost small" data-sh="upload">Upload results from Excel</button>`}<span class="note" id="shSave">All changes saved</span></div></div>
+    let h = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="row"><button class="btn ghost small" data-sh="back">← Back</button>${ctx.siblings && ctx.siblings.length > 1 ? `<select id="shCls" aria-label="Switch class" style="width:auto;font-family:Poppins,sans-serif;font-weight:600;font-size:18px;color:var(--plum);padding:4px 10px">${ctx.siblings.map(x => `<option value="${x.id}" ${x.id === cls.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<h2 style="margin:0;font-family:Poppins,sans-serif;color:var(--plum)">${esc(cls.name)}</h2>`}${ctx.subjects ? `<span class="tag">${esc(C.subjects.map(x => x.name).join(", "))}</span>` : ""}<span class="note">${studs.length} students</span></div><div class="row">${role() === "checker" ? "" : `<button class="btn ghost small" data-sh="upload">Upload results from Excel</button>`}<span class="note" id="shSave">All changes saved</span></div></div>
       <div class="row" style="margin-bottom:10px">${role() === "checker" ? "" : `<button class="pill2" data-mode="overview" aria-pressed="${ui.mode === "overview"}">Class overview</button><button class="pill2" data-mode="strand" aria-pressed="${ui.mode === "strand"}">Record data by strand</button>`}<button class="pill2" data-mode="reports" aria-pressed="${ui.mode === "reports"}">Report comments</button></div>
       <div class="row" style="margin-bottom:10px">${ui.mode === "strand" ? `<label class="note" for="shSub"><b>Subject</b></label><select id="shSub" style="width:auto">${subs.map(s => `<option value="${s.id}" ${s.id === ui.sub ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
       <label class="note" for="shStr"><b>Strand</b></label><select id="shStr" style="width:auto">${sb.strands.map(s => `<option value="${s.id}" ${s.id === ui.strand ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>` : ""}
@@ -368,6 +368,7 @@
   }
   async function onChange(e) {
     const t = e.target; if (!ctx || !ctx.el.contains(t)) return;
+    if (t.id === "shCls") { const nc = ctx.siblings.find(x => x.id === t.value); return TNSheet.open(Object.assign({}, ctx, { cls: nc })); }
     if (t.id === "shSub") { ui.sub = t.value; ui.strand = null; return render(); }
     if (t.id === "shStr") { ui.strand = t.value; return render(); }
     if (t.dataset.taught) {

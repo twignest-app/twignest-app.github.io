@@ -306,19 +306,27 @@ async function classList(school, teacherId, el, role){
   const { data: setups } = await sb.from("school_setups").select("year,config").eq("school_id", school.id).order("updated_at", { ascending: false }).limit(1);
   if (!setups || !setups.length) { el.innerHTML = `<div class="card"><h2>Class sheets</h2><p class="note">Finish the school setup first.</p></div>`; return; }
   const year = setups[0].year, grades = setups[0].config.grades || [];
-  let q = sb.from("classes").select("*").eq("school_id", school.id).eq("year", year).order("name");
-  if (teacherId) { const { data: l } = await sb.from("class_teachers").select("class_id").eq("teacher_id", teacherId); const ids = (l || []).map(x => x.class_id);
-    if (!ids.length) { el.innerHTML = `<div class="card"><h2>My classes</h2><p class="note">You haven’t been added to a class yet. Your school lead adds you to your classes.</p></div>`; return; }
-    q = q.in("id", ids); }
+  const subjects = setups[0].config.subjects || [];
+  let links = null, q = sb.from("classes").select("*").eq("school_id", school.id).eq("year", year).order("name");
+  if (teacherId) { const { data: l } = await sb.from("class_teachers").select("class_id,subject_id").eq("teacher_id", teacherId); links = l || [];
+    if (!links.length) { el.innerHTML = `<div class="card"><h2>My classes</h2><p class="note">You haven’t been added to a class yet. Your school lead adds you to your classes.</p></div>`; return; }
+    q = q.in("id", [...new Set(links.map(x => x.class_id))]); }
   const { data: cls, error } = await q; if (error) { el.innerHTML = `<div class="card"><div class="msg err">${esc(error.message)}</div></div>`; return; }
   if (!cls.length) { el.innerHTML = `<div class="card"><h2>Class sheets</h2><p class="note">No classes yet. Add them in Classes and students.</p></div>`; return; }
   const { data: st } = await sb.from("students").select("id,class_id").in("class_id", cls.map(c => c.id)).eq("archived", false);
-  const gname = id => (grades.find(g => g.id === id) || {}).name || "Other";
-  el.innerHTML = `<div class="card"><h2>${role === "checker" ? "Report comments to check" : teacherId ? "My classes" : "Class sheets"}, ${esc(year)}</h2><p class="note">${role === "checker" ? "Choose a class to check its report comments." : "Choose a class to open its sheet."}</p>
-    <div class="grid2" style="margin-top:12px">${cls.map(c => { const n = (st || []).filter(s => s.class_id === c.id).length;
-      return `<button class="colcard classbtn" data-open="${c.id}" style="margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit"><b style="font-family:Poppins,sans-serif;font-size:18px;color:var(--plum)">${esc(c.name)}</b><div class="note">${esc(gname(c.grade_id))}, ${n} student${n === 1 ? "" : "s"}</div></button>`; }).join("")}</div></div>`;
-  el.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { const c = cls.find(x => x.id === b.dataset.open);
-    TNSheet.open({ sb, cls: c, el, role, back: () => { TNSheet.close(); classList(school, teacherId, el, role); } }); });
+  const gname = id => (grades.find(g => g.id === id) || {}).name || "Other", count = id => (st || []).filter(s => s.class_id === id).length;
+  const btn = (c, key) => `<button class="colcard classbtn" data-open="${key}" style="margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit"><b style="font-family:Poppins,sans-serif;font-size:18px;color:var(--plum)">${esc(c.name)}</b><div class="note">${esc(gname(c.grade_id))}, ${count(c.id)} student${count(c.id) === 1 ? "" : "s"}</div></button>`;
+  const groups = [];
+  if (!teacherId) groups.push({ title: role === "checker" ? "Report comments to check" : "Class sheets", note: role === "checker" ? "Choose a class to check its report comments." : "Choose a class to open its sheet.", list: cls, subjects: null });
+  else {
+    const home = cls.filter(c => links.some(l => l.class_id === c.id && !l.subject_id));
+    if (home.length) groups.push({ title: "My classes", note: "Choose a class to open its sheet.", list: home, subjects: null });
+    [...new Set(links.filter(l => l.subject_id).map(l => l.subject_id))].forEach(sid => { const sb2 = subjects.find(x => x.id === sid); if (!sb2) return;
+      groups.push({ title: `My ${sb2.name} classes`, note: `You see only ${sb2.name} in these classes. Use the class name at the top of the sheet to switch quickly between classes.`, list: cls.filter(c => links.some(l => l.class_id === c.id && l.subject_id === sid)), subjects: [sid] }); });
+  }
+  el.innerHTML = groups.map((g, gi) => `<div class="card"><h2>${esc(g.title)}, ${esc(year)}</h2><p class="note">${g.note}</p><div class="grid2" style="margin-top:12px">${g.list.map(c => btn(c, gi + "|" + c.id)).join("")}</div></div>`).join("");
+  el.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { const [gi, id] = b.dataset.open.split("|"), g = groups[+gi], c = g.list.find(x => x.id === id);
+    TNSheet.open({ sb, cls: c, el, role, subjects: g.subjects, siblings: g.list, back: () => { TNSheet.close(); classList(school, teacherId, el, role); } }); });
 }
 
 sb.auth.onAuthStateChange((event) => {

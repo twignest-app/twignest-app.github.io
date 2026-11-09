@@ -100,10 +100,13 @@
     byGrade.forEach(([g, list]) => {
       h += `<h3 style="margin:18px 0 8px;font-family:Poppins,sans-serif;color:var(--plum)">${esc(g.name)}</h3><div class="grid2">`;
       list.forEach(c => {
-        const tIds = links.filter(l => l.class_id === c.id).map(l => l.teacher_id), n = students.filter(s => s.class_id === c.id).length;
+        const tIds = links.filter(l => l.class_id === c.id && !l.subject_id).map(l => l.teacher_id), spec = links.filter(l => l.class_id === c.id && l.subject_id), n = students.filter(s => s.class_id === c.id).length, subs = setup.config.subjects || [];
         h += `<div class="card" style="margin:0"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(c.name)}</h2><span class="note">${n} student${n === 1 ? "" : "s"}</span></div>
-          <p class="note" style="margin:8px 0 4px"><b>Teachers</b></p>
+          <p class="note" style="margin:8px 0 4px"><b>Class teachers</b> (all subjects)</p>
           ${teachers.length ? teachers.map(t => `<label class="check" style="margin:4px 0"><input type="checkbox" data-teach="${c.id}|${t.id}" ${tIds.includes(t.id) ? "checked" : ""}> ${esc(t.full_name || t.email)}</label>`).join("") : `<p class="note">No approved staff yet.</p>`}
+          <p class="note" style="margin:12px 0 4px"><b>Specialist teachers</b> (one subject)</p>
+          ${spec.map(l => { const tt = teachers.find(x => x.id === l.teacher_id), sb = subs.find(x => x.id === l.subject_id); return `<div class="row" style="margin:3px 0"><span style="font-size:14px">${esc(tt ? (tt.full_name || tt.email) : "Former staff")} · <b>${esc(sb ? sb.name : "Removed subject")}</b></span><button class="mini" data-cact="del-spec" data-id="${c.id}|${l.teacher_id}|${l.subject_id}" aria-label="Remove">Remove</button></div>`; }).join("") || `<p class="note" style="margin:0">None yet.</p>`}
+          ${teachers.length && subs.length ? `<div class="row" style="margin-top:6px"><select id="spT-${c.id}" aria-label="Teacher" style="width:auto;padding:6px 8px">${teachers.map(t => `<option value="${t.id}">${esc(t.full_name || t.email)}</option>`).join("")}</select><select id="spS-${c.id}" aria-label="Subject" style="width:auto;padding:6px 8px">${subs.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><button class="btn ghost small" data-cact="add-spec" data-id="${c.id}">Add</button></div>` : ""}
           <div class="row" style="margin-top:12px"><button class="btn small" data-cact="students" data-id="${c.id}">${openClass === c.id ? "Close student list" : "Add or edit students"}</button>
           <button class="btn ghost small" data-cact="del-class" data-id="${c.id}">Remove class</button></div>
           ${openClass === c.id ? studentEditor(c) : ""}</div>`;
@@ -155,6 +158,12 @@
       preview = null; await load(); render();
       ctx.el.insertAdjacentHTML("afterbegin", `<div class="msg ok" style="margin-bottom:12px">Imported ${ins.length} student${ins.length === 1 ? "" : "s"}.</div>`); return;
     }
+    if (a === "add-spec") {
+      const t = document.getElementById("spT-" + id).value, s = document.getElementById("spS-" + id).value;
+      if (links.some(l => l.class_id === id && l.teacher_id === t && l.subject_id === s)) return;
+      const { error } = await sb.from("class_teachers").insert({ class_id: id, teacher_id: t, subject_id: s }); if (error) return alert(error.message);
+    }
+    if (a === "del-spec") { const [cid, tid, sid] = id.split("|"); const { error } = await sb.from("class_teachers").delete().eq("class_id", cid).eq("teacher_id", tid).eq("subject_id", sid); if (error) return alert(error.message); }
     if (a === "students") { openClass = openClass === id ? null : id; return render(); }
     if (a === "save-students") {
       const msg = document.getElementById("stMsg-" + id), groups = setup.config.groups || [];
@@ -188,7 +197,7 @@
     }
     if (!t.dataset.teach || !ctx.el.contains(t)) return;
     const [cid, tid] = t.dataset.teach.split("|");
-    const q = t.checked ? ctx.sb.from("class_teachers").insert({ class_id: cid, teacher_id: tid }) : ctx.sb.from("class_teachers").delete().eq("class_id", cid).eq("teacher_id", tid);
+    const q = t.checked ? ctx.sb.from("class_teachers").insert({ class_id: cid, teacher_id: tid }) : ctx.sb.from("class_teachers").delete().eq("class_id", cid).eq("teacher_id", tid).is("subject_id", null);
     const { error } = await q; if (error) { alert(error.message); t.checked = !t.checked; return; }
     await load();
   }
