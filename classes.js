@@ -2,7 +2,70 @@
 (function () {
   const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const lines = v => v.split("\n").map(x => x.trim()).filter(Boolean);
-  let ctx, setup, classes = [], teachers = [], links = [], students = [], openClass = null, bound = false;
+  let ctx, setup, classes = [], teachers = [], links = [], students = [], openClass = null, bound = false, preview = null;
+  const norm = v => String(v ?? "").toLowerCase().replace(/[\s\-_.]/g, "");
+  async function loadXLSX() {
+    if (window.XLSX) return;
+    await new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      sc.onload = res; sc.onerror = () => rej(new Error("Couldn’t load the Excel reader. Check your internet connection and try again.")); document.head.appendChild(sc); });
+  }
+  function matchGrade(v) {
+    const grades = setup.config.grades || [], n = norm(v); if (!n) return null;
+    let g = grades.find(x => norm(x.name) === n); if (g) return g;
+    if (/^\d+$/.test(n)) g = grades.find(x => norm(x.name) === "grade" + n || norm(x.name) === "year" + n); if (g) return g;
+    return grades.find(x => norm(x.name).endsWith(n) && n.length >= 2) || null;
+  }
+  async function readFile(file) {
+    await loadXLSX();
+    const wb = XLSX.read(await file.arrayBuffer()), ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    const hi = rows.findIndex(r => r.some(c => /name/i.test(String(c))));
+    if (hi < 0) throw new Error("I couldn’t find a heading row with a “Name” column. Use the template, or add a heading row: Name, Class, Grade, Groups.");
+    const head = rows[hi].map(h => String(h).trim().toLowerCase()), find = re => head.findIndex(h => re.test(h));
+    let nameI = find(/^(full ?name|student ?name|name)$/), firstI = find(/^first ?name$/), lastI = find(/^(last ?name|surname|family ?name)$/);
+    if (nameI < 0 && firstI < 0) nameI = find(/name/);
+    const classI = find(/^(class|section|homeroom|class ?name)$/), gradeI = find(/^(grade|year ?group|year|grade ?level)$/), groupsI = find(/^(groups?|tags?)$/);
+    const setupGroups = setup.config.groups || [], flagCols = setupGroups.map(g => [g, head.findIndex(h => norm(h) === norm(g))]).filter(x => x[1] >= 0);
+    if (classI < 0) throw new Error("I couldn’t find a “Class” column. Add a column called Class with names like 2A.");
+    const out = [];
+    rows.slice(hi + 1).forEach((r, i) => {
+      const name = (nameI >= 0 ? String(r[nameI]) : [r[firstI], lastI >= 0 ? r[lastI] : ""].join(" ")).replace(/\s+/g, " ").trim();
+      const cls = String(r[classI] ?? "").trim();
+      if (!name && !cls) return;
+      let groups = groupsI >= 0 ? String(r[groupsI]).split(/[,;\/]/).map(x => x.trim()).filter(Boolean) : [];
+      flagCols.forEach(([g, ci]) => { const v = String(r[ci]).trim().toLowerCase(); if (v && !["no", "n", "0", "false", "-"].includes(v)) groups.push(g); });
+      const known = [], unknown = [];
+      groups.forEach(g => { const m = setupGroups.find(x => norm(x) === norm(g)); if (m) { if (!known.includes(m)) known.push(m); } else unknown.push(g); });
+      const existing = classes.find(c => c.name.toLowerCase() === cls.toLowerCase());
+      const grade = existing ? (setup.config.grades || []).find(g => g.id === existing.grade_id) : (gradeI >= 0 ? matchGrade(r[gradeI]) : null);
+      let problem = "";
+      if (!name) problem = "No name"; else if (!cls) problem = "No class"; else if (!grade) problem = gradeI >= 0 && String(r[gradeI]).trim() ? `Grade “${r[gradeI]}” isn’t in your setup` : "No grade for a new class";
+      out.push({ row: hi + i + 2, name, cls, grade, groups: known, unknown, existing, problem });
+    });
+    const ok = out.filter(x => !x.problem), seen = new Set();
+    ok.forEach(x => { const k = x.cls.toLowerCase() + "|" + x.name.toLowerCase(); x.dupe = seen.has(k); seen.add(k);
+      const ex = x.existing && students.find(s => s.class_id === x.existing.id && s.full_name.toLowerCase() === x.name.toLowerCase()); x.match = ex || null; });
+    const newClasses = [...new Map(ok.filter(x => !x.existing).map(x => [x.cls.toLowerCase(), x])).values()].map(x => ({ name: x.cls, grade: x.grade }));
+    preview = { file: file.name, rows: out, newClasses, unknown: [...new Set(out.flatMap(x => x.unknown))] };
+  }
+  function previewCard() {
+    const p = preview, ok = p.rows.filter(x => !x.problem && !x.dupe), bad = p.rows.filter(x => x.problem), dup = p.rows.filter(x => x.dupe);
+    const add = ok.filter(x => !x.match).length, upd = ok.filter(x => x.match && JSON.stringify(x.match.groups || []) !== JSON.stringify(x.groups)).length, same = ok.length - add - upd;
+    return `<div class="card"><h2>Check the list before importing</h2><p class="note">From <b>${esc(p.file)}</b></p>
+      <div class="grid3" style="margin:12px 0">
+        <div class="colcard" style="margin:0"><b style="font-size:24px;color:var(--plum)">${add}</b><div class="note">new students to add</div></div>
+        <div class="colcard" style="margin:0"><b style="font-size:24px;color:var(--plum)">${p.newClasses.length}</b><div class="note">new classes to create${p.newClasses.length ? ": " + p.newClasses.map(c => esc(c.name) + " (" + esc(c.grade.name) + ")").join(", ") : ""}</div></div>
+        <div class="colcard" style="margin:0"><b style="font-size:24px;color:var(--plum)">${upd + same}</b><div class="note">already in TwigNest${upd ? `, ${upd} with groups to update` : ""}</div></div>
+      </div>
+      ${bad.length ? `<div class="msg err">${bad.length} row${bad.length === 1 ? "" : "s"} can’t be imported and will be skipped:</div><div class="tablewrap"><table><tr><th>Row</th><th>Name</th><th>Class</th><th>Problem</th></tr>${bad.slice(0, 30).map(x => `<tr><td>${x.row}</td><td>${esc(x.name)}</td><td>${esc(x.cls)}</td><td>${esc(x.problem)}</td></tr>`).join("")}</table></div>` : ""}
+      ${dup.length ? `<div class="msg info">${dup.length} name${dup.length === 1 ? " appears" : "s appear"} twice in the same class and will only be added once.</div>` : ""}
+      ${p.unknown.length ? `<div class="msg info">These groups aren’t in your setup and will be ignored: ${p.unknown.map(esc).join(", ")}. Add them in School setup, step 6, if you need them.</div>` : ""}
+      <h3>First rows</h3><div class="tablewrap"><table><tr><th>Name</th><th>Class</th><th>Grade</th><th>Groups</th><th></th></tr>
+      ${ok.slice(0, 15).map(x => `<tr><td>${esc(x.name)}</td><td>${esc(x.cls)}</td><td>${esc(x.grade.name)}</td><td>${x.groups.map(esc).join(", ")}</td><td class="note">${x.match ? "Already added" : "New"}</td></tr>`).join("")}</table></div>
+      ${ok.length > 15 ? `<p class="note">…and ${ok.length - 15} more.</p>` : ""}
+      <p class="note">Students already in TwigNest but not in this file are left as they are.</p>
+      <div class="row" style="margin-top:12px"><button class="btn" data-cact="do-import" ${add + upd + p.newClasses.length ? "" : "disabled"}>Import ${add} student${add === 1 ? "" : "s"}</button><button class="btn ghost" data-cact="cancel-import">Cancel</button><span id="impMsg" class="note"></span></div></div>`;
+  }
 
   async function load() {
     const sb = ctx.sb, sid = ctx.school.id;
@@ -28,7 +91,10 @@
     const grades = setup.config.grades || [];
     let h = `<div class="card"><h2>Classes and students, ${esc(setup.year)}</h2><p class="note">Add each class, choose its teachers, then add its students. You can paste student names straight from Excel.</p>
       <div class="row" style="margin-top:12px"><select id="newGrade" aria-label="Grade">${grades.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select>
-      <input id="newClass" type="text" placeholder="Class name, for example 2A" aria-label="Class name" style="max-width:260px"><button class="btn" data-cact="add-class">Add class</button></div><div id="cMsg"></div></div>`;
+      <input id="newClass" type="text" placeholder="Class name, for example 2A" aria-label="Class name" style="max-width:260px"><button class="btn" data-cact="add-class">Add class</button></div><div id="cMsg"></div>
+      <h3>Or upload a whole-school list</h3><p class="note">Upload an Excel or CSV file with the columns <b>Name</b>, <b>Class</b>, <b>Grade</b> and <b>Groups</b>. TwigNest creates any missing classes and shows you a preview before anything is saved.</p>
+      <div class="row"><label class="btn" style="display:inline-block;margin:0;font-size:16px;cursor:pointer">Upload a list<input type="file" id="listFile" accept=".xlsx,.xls,.csv" hidden></label><button class="btn ghost" data-cact="template">Download the template</button></div><div id="upMsg"></div></div>`;
+    if (preview) h += previewCard();
     const byGrade = grades.map(g => [g, classes.filter(c => c.grade_id === g.id)]).filter(x => x[1].length);
     if (!classes.length) h += `<div class="card"><p class="note">No classes yet. Add your first class above.</p></div>`;
     byGrade.forEach(([g, list]) => {
@@ -70,6 +136,25 @@
       if (n) await sb.from("students").update({ archived: true }).eq("class_id", id);
       const { error } = await sb.from("classes").delete().eq("id", id); if (error) return alert(error.message);
     }
+    if (a === "template") {
+      await loadXLSX();
+      const g = (setup.config.grades || []), ex = g.find(x => /2/.test(x.name)) || g[0] || { name: "Grade 2" }, grp = setup.config.groups || [];
+      const ws = XLSX.utils.aoa_to_sheet([["Name", "Class", "Grade", "Groups"], ["Layla Hassan", "2A", ex.name, grp[2] || "EAL"], ["Omar Khalid", "2A", ex.name, ""], ["Yusuf Rahman", "2A", ex.name, [grp[0], grp[3]].filter(Boolean).join(", ")]]);
+      ws["!cols"] = [{ wch: 28 }, { wch: 10 }, { wch: 12 }, { wch: 24 }];
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Students"); XLSX.writeFile(wb, "TwigNest student list template.xlsx"); return;
+    }
+    if (a === "cancel-import") { preview = null; return render(); }
+    if (a === "do-import") {
+      const msg = document.getElementById("impMsg"), p = preview; msg.textContent = "Importing…";
+      if (p.newClasses.length) { const { error } = await sb.from("classes").insert(p.newClasses.map(c => ({ school_id: ctx.school.id, year: setup.year, grade_id: c.grade.id, name: c.name }))); if (error) { msg.textContent = error.message; return; } }
+      await load();
+      const ok = p.rows.filter(x => !x.problem && !x.dupe), cid = n => classes.find(c => c.name.toLowerCase() === n.toLowerCase()).id;
+      const ins = ok.filter(x => !x.match).map(x => ({ school_id: ctx.school.id, class_id: cid(x.cls), full_name: x.name, groups: x.groups }));
+      for (let i = 0; i < ins.length; i += 400) { const { error } = await sb.from("students").insert(ins.slice(i, i + 400)); if (error) { msg.textContent = error.message; return; } msg.textContent = `Importing… ${Math.min(i + 400, ins.length)} of ${ins.length}`; }
+      for (const x of ok.filter(x => x.match && JSON.stringify(x.match.groups || []) !== JSON.stringify(x.groups))) { await sb.from("students").update({ groups: x.groups }).eq("id", x.match.id); }
+      preview = null; await load(); render();
+      ctx.el.insertAdjacentHTML("afterbegin", `<div class="msg ok" style="margin-bottom:12px">Imported ${ins.length} student${ins.length === 1 ? "" : "s"}.</div>`); return;
+    }
     if (a === "students") { openClass = openClass === id ? null : id; return render(); }
     if (a === "save-students") {
       const msg = document.getElementById("stMsg-" + id), groups = setup.config.groups || [];
@@ -96,7 +181,12 @@
     b.disabled = true; try { await act(b.dataset.cact, b.dataset.id, b); } catch (err) { alert(err.message || err); } finally { b.disabled = false; }
   }
   async function onChange(e) {
-    const t = e.target; if (!t.dataset.teach || !ctx.el.contains(t)) return;
+    const t = e.target;
+    if (t.id === "listFile" && ctx.el.contains(t)) {
+      const f = t.files[0]; if (!f) return; const m = document.getElementById("upMsg"); m.innerHTML = `<p class="note">Reading ${esc(f.name)}…</p>`;
+      try { await readFile(f); render(); } catch (err) { m.innerHTML = `<div class="msg err">${esc(err.message || err)}</div>`; } t.value = ""; return;
+    }
+    if (!t.dataset.teach || !ctx.el.contains(t)) return;
     const [cid, tid] = t.dataset.teach.split("|");
     const q = t.checked ? ctx.sb.from("class_teachers").insert({ class_id: cid, teacher_id: tid }) : ctx.sb.from("class_teachers").delete().eq("class_id", cid).eq("teacher_id", tid);
     const { error } = await q; if (error) { alert(error.message); t.checked = !t.checked; return; }
