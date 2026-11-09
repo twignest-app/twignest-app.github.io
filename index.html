@@ -6,24 +6,29 @@
 <title>TwigNest</title>
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--plum:#5E3457;--plum-2:#7B4A73;--plum-soft:#F2E8F0;--sage:#5F7F54;--sage-soft:#E7EFE2;--amber:#A86C12;--amber-soft:#FBF0DC;--red:#B4473A;--red-soft:#F8E4E1;--bg:#FAF8FA;--card:#FFFFFF;--ink:#2B2230;--muted:#6E6472;--line:#E6DEE5;color-scheme:light}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--plum:#D7A9CE;--plum-2:#E5BFDD;--plum-soft:#3A2836;--sage:#A7C59A;--sage-soft:#26331F;--amber:#E6B566;--amber-soft:#3A2E17;--red:#E8897C;--red-soft:#3D2220;--bg:#1B171C;--card:#252027;--ink:#F1EAF0;--muted:#B3A8B2;--line:#3A3239;color-scheme:dark}}
+:root{--plum:#462D5B;--plum-2:#6A4B85;--plum-soft:#EDE6F5;--lav:#B4A2D5;--sage:#5E8455;--sage-soft:#E6EFE2;--amber:#A86C12;--amber-soft:#FBF0DC;--red:#B4473A;--red-soft:#F8E4E1;--bg:#F7F4FB;--card:#FFFFFF;--ink:#2E2140;--muted:#6F6680;--line:#E4DDEE;color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--plum:#CDB9EA;--plum-2:#DCCCF2;--plum-soft:#352A45;--lav:#8E7AB5;--sage:#A7C59A;--sage-soft:#26331F;--amber:#E6B566;--amber-soft:#3A2E17;--red:#E8897C;--red-soft:#3D2220;--bg:#17131D;--card:#221C2B;--ink:#F1ECF7;--muted:#B2A8C2;--line:#382F45;color-scheme:dark}}
 *{box-sizing:border-box}html,body{margin:0}
 body{font-family:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);font-size:16px;line-height:1.55;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 button,input,select{font:inherit;color:inherit}
 :focus-visible{outline:3px solid var(--plum-2);outline-offset:2px}
 header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line)}
-header img{width:48px;height:48px;border-radius:50%}
-header h1{margin:0;font-size:22px;font-weight:800;color:var(--plum)}header h1 span{color:var(--sage)}
+header img{height:52px;width:auto}
+header h1{display:none}
+h2,.btn,.tabs button{font-family:"Poppins","Nunito",system-ui,sans-serif}
+.card h2{font-weight:600}
 header .who{margin-left:auto;display:flex;gap:10px;align-items:center;font-size:14px;color:var(--muted)}
 main{max-width:980px;margin:0 auto;padding:24px 20px 48px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:18px}
 .card h2{margin:0 0 8px;font-size:20px;color:var(--plum)}
 .narrow{max-width:440px;margin:24px auto}
-.hero{text-align:center;margin:10px 0 18px}.hero img{width:170px;height:170px;border-radius:50%}
-.hero p{color:var(--muted);margin:6px 0 0}
+.hero{text-align:center;margin:0 0 20px}.hero img{width:min(300px,80vw);height:auto;display:block;margin:0 auto}
+body.auth header{display:none}
+.btn{box-shadow:0 2px 0 rgba(70,45,91,.15)}
+.tabs button[aria-pressed="true"]{box-shadow:none}
+.hero p{color:var(--muted);margin:10px 0 0;font-size:15px}
 label{display:block;font-weight:700;font-size:14px;margin:12px 0 4px}
 input[type=text],input[type=email],input[type=password],select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px}
 .btn{border:0;background:var(--plum);color:#fff;border-radius:999px;padding:10px 20px;font-weight:800;cursor:pointer}
@@ -82,6 +87,7 @@ function show(el, text, kind){ el.innerHTML = text ? `<div class="msg ${kind}">$
 async function busy(btn, fn){ btn.disabled = true; try { await fn(); } finally { btn.disabled = false; } }
 
 function authView(){
+  document.body.classList.add("auth");
   who.innerHTML = "";
   app.innerHTML = `<div class="narrow">
     <div class="hero"><img src="logo.png" alt=""><p>Track every student’s progress, from baseline to the end of the year.</p></div>
@@ -121,6 +127,7 @@ function authView(){
 }
 
 function resetView(){
+  document.body.classList.add("auth");
   app.innerHTML = `<div class="narrow card"><h2>Choose a new password</h2>
     <form id="rf"><label for="np">New password</label><input id="np" type="password" minlength="8" autocomplete="new-password" required>
     <button class="btn full" id="rb" type="submit">Save new password</button></form><div id="rm"></div></div>`;
@@ -131,6 +138,7 @@ function resetView(){
 }
 
 function header(p){
+  document.body.classList.remove("auth");
   who.innerHTML = `<span>${esc(p.full_name || p.email)} · ${ROLES[p.role] || ""}</span><button class="btn ghost small" id="out">Sign out</button>`;
   document.getElementById("out").onclick = async () => { await sb.auth.signOut(); authTab = "signin"; render(); };
 }
@@ -198,7 +206,7 @@ async function leadPanel(p, school){
 }
 
 function waitView(title, text){
-  app.innerHTML = `<div class="narrow card" style="text-align:center"><img src="logo.png" alt="" style="width:110px;height:110px;border-radius:50%"><h2>${esc(title)}</h2><p class="note">${esc(text)}</p>
+  app.innerHTML = `<div class="narrow card" style="text-align:center"><img src="logo.png" alt="" style="width:160px;height:auto"><h2>${esc(title)}</h2><p class="note">${esc(text)}</p>
     <button class="btn ghost" id="chk">Check again</button></div>`;
   document.getElementById("chk").onclick = render;
 }
