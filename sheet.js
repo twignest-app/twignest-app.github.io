@@ -296,7 +296,7 @@
     const [, st] = findStrand(ui.strand), t = ui.term, k = String(t);
     const bc = st.cols.filter(c => c.baseline), tc = st.cols.filter(c => !c.baseline);
     let n = 0; tc.forEach(c => { n += c.type === "objectives" ? objs(c, t).length : 1; });
-    let h = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="row"><button class="btn ghost small" data-sh="back">← Back</button><h2 style="margin:0;font-family:Poppins,sans-serif;color:var(--plum)">${esc(cls.name)}</h2><span class="note">${studs.length} students</span></div><span class="note" id="shSave">All changes saved</span></div>
+    let h = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="row"><button class="btn ghost small" data-sh="back">← Back</button><h2 style="margin:0;font-family:Poppins,sans-serif;color:var(--plum)">${esc(cls.name)}</h2><span class="note">${studs.length} students</span></div><div class="row">${role() === "checker" ? "" : `<button class="btn ghost small" data-sh="upload">Upload results from Excel</button>`}<span class="note" id="shSave">All changes saved</span></div></div>
       <div class="row" style="margin-bottom:10px">${role() === "checker" ? "" : `<button class="pill2" data-mode="overview" aria-pressed="${ui.mode === "overview"}">Class overview</button><button class="pill2" data-mode="strand" aria-pressed="${ui.mode === "strand"}">Record data by strand</button>`}<button class="pill2" data-mode="reports" aria-pressed="${ui.mode === "reports"}">Report comments</button></div>
       <div class="row" style="margin-bottom:10px">${ui.mode === "strand" ? `<label class="note" for="shSub"><b>Subject</b></label><select id="shSub" style="width:auto">${subs.map(s => `<option value="${s.id}" ${s.id === ui.sub ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
       <label class="note" for="shStr"><b>Strand</b></label><select id="shStr" style="width:auto">${sb.strands.map(s => `<option value="${s.id}" ${s.id === ui.strand ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>` : ""}
@@ -341,6 +341,13 @@
     if (t.dataset.edit) { const [a, b] = t.dataset.edit.split("|"); return openEditor(a, b); }
     if (t.dataset.pstrand) { ui.pStrand = t.dataset.pstrand; return openProfile(ui.pid); }
     if (t.dataset.sh === "back") return ctx.back();
+    if (t.dataset.sh === "upload") {
+      const st = findStrand(ui.strand)[1], first = st && st.cols.find(c => !["objectives", "comment"].includes(c.type));
+      return TNResults.open({ sb: ctx.sb, C, scopeText: `For ${cls.name}. Rows for students in other classes are ignored.`, limitClass: cls.name,
+        students: studs.map(x => ({ ...x, class_name: cls.name })), colId: first ? first.id : null, term: first && first.baseline ? "b" : String(ui.term),
+        existing: (sid, cid, k) => val(sid, cid, k),
+        onDone: async n => { await load(); render(); ctx.el.insertAdjacentHTML("afterbegin", `<div class="msg ok" style="margin-bottom:10px">Saved ${n} result${n === 1 ? "" : "s"}.</div>`); } });
+    }
     if (t.dataset.mode) { ui.mode = t.dataset.mode; return render(); }
     if (t.dataset.prof) { ui.pStrand = null; return openProfile(t.dataset.prof); }
     if (t.dataset.term) { ui.term = +t.dataset.term; return render(); }

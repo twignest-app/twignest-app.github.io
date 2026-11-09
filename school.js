@@ -92,7 +92,7 @@
 
   function render() {
     const t = ui.term, list = filtered("All"), grades = C.grades || [];
-    let h = `<div class="row" style="margin-bottom:10px"><button class="pill2" data-smode="subject" aria-pressed="${ui.mode === "subject"}">By subject (overall)</button><button class="pill2" data-smode="strand" aria-pressed="${ui.mode === "strand"}">By strand (detail)</button>
+    let h = `<div class="row" style="justify-content:flex-end;margin-bottom:6px"><button class="btn ghost small" data-supload="1">Upload results for the whole school</button></div><div class="row" style="margin-bottom:10px"><button class="pill2" data-smode="subject" aria-pressed="${ui.mode === "subject"}">By subject (overall)</button><button class="pill2" data-smode="strand" aria-pressed="${ui.mode === "strand"}">By strand (detail)</button>
       <label class="note" for="svGrade" style="margin-left:8px"><b>Grade</b></label><select id="svGrade" style="width:auto"><option value="All">All grades</option>${grades.map(g => `<option value="${g.id}" ${g.id === ui.grade ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select></div>
       <div class="row" style="margin-bottom:8px">${C.terms.map((x, i) => `<button class="chip" data-sterm="${i}" aria-pressed="${i === t}">${esc(x)}</button>`).join("")}</div>
       <div class="row" style="margin-bottom:14px">${["All", ...(C.groups || [])].map(g => `<button class="chip" data-sgrp="${esc(g)}" aria-pressed="${g === ui.group}">${g === "All" ? "All students" : esc(g)}</button>`).join("")}</div>`;
@@ -122,6 +122,9 @@
   }
 
   function onClick(e) { const b = e.target.closest("button"); if (!b || !ctx || !ctx.el.contains(b)) return;
+    if (b.dataset.supload) return TNResults.open({ sb: ctx.sb, C, scopeText: "For the whole school. Include a Class column if two students share the same name.", limitClass: null,
+      students: studs.map(x => ({ ...x, class_name: (clsOf(x) || {}).name })), existing: (sid, cid, k) => val(sid, cid, k),
+      onDone: async n => { await load(); render(); ctx.el.insertAdjacentHTML("afterbegin", `<div class="msg ok" style="margin-bottom:10px">Saved ${n} result${n === 1 ? "" : "s"}.</div>`); } });
     if (b.dataset.smode) { ui.mode = b.dataset.smode; render(); window.scrollTo(0, 0); }
     if (b.dataset.sterm) { ui.term = +b.dataset.sterm; render(); }
     if (b.dataset.sgrp) { ui.group = b.dataset.sgrp; render(); } }
