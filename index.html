@@ -81,6 +81,7 @@ label.check{display:flex;gap:8px;align-items:center;margin-top:34px}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="setup.js"></script>
+<script src="classes.js"></script>
 <script>
 const SUPABASE_URL = "https://oivsizxgekpiltrmrmqh.supabase.co";
 const SUPABASE_KEY = "sb_publishable_5cHJA5XXHwRe-YyTeo-deA_-3xZS5DP";
@@ -243,17 +244,19 @@ async function render(){
   if (school.status === "suspended") return waitView("Access paused", `${school.name}’s access to TwigNest is paused. Please contact TwigNest.`);
   if (!p.active) return waitView("Waiting for your school lead", `You’ve joined ${school.name}. Your school lead needs to approve your account before you can start.`);
   if (p.role === "school_lead") {
-    app.innerHTML = `<div class="navtabs" role="group" aria-label="Sections"><button data-lt="setup" aria-pressed="${leadTab==="setup"}">School setup</button><button data-lt="staff" aria-pressed="${leadTab==="staff"}">Staff and school code</button></div><div id="leadBody"></div>`;
+    app.innerHTML = `<div class="navtabs" role="group" aria-label="Sections"><button data-lt="setup" aria-pressed="${leadTab==="setup"}">School setup</button><button data-lt="classes" aria-pressed="${leadTab==="classes"}">Classes and students</button><button data-lt="staff" aria-pressed="${leadTab==="staff"}">Staff and school code</button></div><div id="leadBody"></div>`;
     app.querySelectorAll("[data-lt]").forEach(b => b.onclick = () => { leadTab = b.dataset.lt; render(); });
     const body = document.getElementById("leadBody");
     if (leadTab === "setup") return TNSetup.open({ sb, school, profile: p, el: body });
+    if (leadTab === "classes") return TNClasses.open({ sb, school, profile: p, el: body });
     body.innerHTML = `<div class="grid2"><div class="card"><h2>Your school code</h2><p class="note">Give this code to your teachers. They create an account, choose “Join my school” and enter it. You then approve them below.</p><div class="code">${esc(school.join_code)}</div></div></div>
       <div class="card"><h2>Staff</h2><p class="note">Approve teachers who have joined and choose their role.</p><div id="members" class="tablewrap"><p class="note">Loading…</p></div></div>`;
     return leadPanel(p, school);
   }
   const { data: setups } = await sb.from("school_setups").select("status,year").eq("school_id", school.id).order("updated_at", { ascending: false }).limit(1);
   const ready = setups && setups[0] && setups[0].status === "live";
-  app.innerHTML = `<div class="card"><h2>${esc(school.name)}</h2><p class="note">Welcome, ${esc((p.full_name||"").split(" ")[0])}. ${ready ? `Your school’s setup for ${esc(setups[0].year)} is ready. Your class sheets will appear here soon.` : "Your school lead is still setting up TwigNest. Your class sheets will appear here once it’s ready."}</p></div>`;
+  app.innerHTML = `<div class="card"><h2>${esc(school.name)}</h2><p class="note">Welcome, ${esc((p.full_name||"").split(" ")[0])}. ${ready ? `Your school’s setup for ${esc(setups[0].year)} is ready. ` : "Your school lead is still setting up TwigNest. Your classes will appear here once it’s ready."}</p></div>`;
+  if (ready) TNClasses.myClasses({ sb, school, profile: p, el: app });
 }
 
 sb.auth.onAuthStateChange((event) => {
