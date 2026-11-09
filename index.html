@@ -21,7 +21,7 @@ header h1{display:none}
 h2,.btn,.tabs button{font-family:"Poppins","Nunito",system-ui,sans-serif}
 .card h2{font-weight:600}
 header .who{margin-left:auto;display:flex;gap:10px;align-items:center;font-size:14px;color:var(--muted)}
-main{max-width:980px;margin:0 auto;padding:24px 20px 48px}
+main{max-width:1400px;margin:0 auto;padding:24px 20px 48px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:18px}
 .card h2{margin:0 0 8px;font-size:20px;color:var(--plum)}
 .narrow{max-width:440px;margin:24px auto}
@@ -66,6 +66,28 @@ input[type=number]{border:1px solid var(--line);background:var(--bg);border-radi
 label.check{display:flex;gap:8px;align-items:center;margin-top:34px}
 .issue{padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px;display:flex;gap:10px;align-items:center;justify-content:space-between}
 .ok{color:var(--sage);font-weight:800}
+.sheetwrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px}
+table.sheet th,table.sheet td{text-align:center;white-space:nowrap;padding:8px 10px}
+table.sheet thead th{font-size:12.5px;color:var(--muted);vertical-align:bottom}
+table.sheet th.grp{font-size:13px;color:var(--plum);border-bottom:2px solid var(--plum-soft);text-align:center}
+table.sheet th.obj{white-space:normal;min-width:118px;max-width:140px;text-align:left}
+table.sheet th.obj .t{display:block;color:var(--ink);font-weight:700;font-size:12.5px;line-height:1.3;margin-bottom:6px}
+table.sheet th.obj label{display:flex;gap:5px;align-items:center;font-size:12px;margin:0 0 4px}
+table.sheet th.colh{white-space:normal;min-width:90px;max-width:130px}table.sheet th.colh b{display:block;color:var(--ink)}
+.namecol{position:sticky;left:0;background:var(--card);text-align:left!important;z-index:1;min-width:180px}
+.tags{display:flex;gap:4px;margin-top:3px;flex-wrap:wrap}.tag{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--plum-soft);color:var(--plum)}
+.dot{width:30px;height:30px;border-radius:50%;border:2px dashed var(--line);background:transparent;cursor:pointer;display:inline-grid;place-items:center;font-size:13px;font-weight:800;padding:0}
+.dot.s{background:var(--sage);border:2px solid var(--sage);color:#fff}.dot.n{background:var(--amber-soft);border:2px solid var(--amber);color:var(--amber)}.dot.e{background:var(--plum);border:2px solid var(--plum);color:#fff}
+.dot:disabled{cursor:not-allowed;border-style:solid;opacity:.35}
+.in{width:76px;padding:5px 6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg)}select.in{width:auto;max-width:150px;text-align:left}
+.tb{background:var(--red-soft)!important}.ti{background:var(--sage-soft)!important}.ta{background:var(--plum-soft)!important}
+.lv{max-width:170px;width:auto;padding:5px 8px}
+.mini{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:3px 6px;font-size:11.5px;font-weight:700;cursor:pointer}.mini:disabled{opacity:.4;cursor:not-allowed}
+.chip{border:1px solid var(--line);background:var(--card);padding:6px 13px;border-radius:999px;cursor:pointer;font-weight:700;font-size:14px}
+.chip[aria-pressed="true"]{background:var(--plum);border-color:var(--plum);color:#fff}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted);margin:6px 0 12px}.legend span{display:inline-flex;align-items:center;gap:6px}
+.b-below{background:var(--red-soft);color:var(--red)}.b-inline{background:var(--sage-soft);color:var(--sage)}.b-above{background:var(--plum-soft);color:var(--plum)}.b-none{background:var(--bg);color:var(--muted)}
+.classbtn:hover{border-color:var(--plum-2)}
 .navtabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
 .navtabs button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 16px;font-weight:700;cursor:pointer;font-family:"Poppins","Nunito",sans-serif}
 .navtabs button[aria-pressed="true"]{background:var(--plum);color:#fff;border-color:var(--plum)}
@@ -82,6 +104,7 @@ label.check{display:flex;gap:8px;align-items:center;margin-top:34px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="setup.js"></script>
 <script src="classes.js"></script>
+<script src="sheet.js"></script>
 <script>
 const SUPABASE_URL = "https://oivsizxgekpiltrmrmqh.supabase.co";
 const SUPABASE_KEY = "sb_publishable_5cHJA5XXHwRe-YyTeo-deA_-3xZS5DP";
@@ -90,7 +113,7 @@ const app = document.getElementById("app"), who = document.getElementById("who")
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ROLES = {admin:"TwigNest admin", school_lead:"School lead", teacher:"Teacher", checker:"Buddy checker"};
 const here = location.origin + location.pathname;
-let authTab = "signin", recovering = false, leadTab = "setup";
+let authTab = "signin", recovering = false, leadTab = "sheets";
 
 function friendly(e){
   const m = (e && (e.message || e.error_description)) || String(e);
@@ -244,11 +267,12 @@ async function render(){
   if (school.status === "suspended") return waitView("Access paused", `${school.name}’s access to TwigNest is paused. Please contact TwigNest.`);
   if (!p.active) return waitView("Waiting for your school lead", `You’ve joined ${school.name}. Your school lead needs to approve your account before you can start.`);
   if (p.role === "school_lead") {
-    app.innerHTML = `<div class="navtabs" role="group" aria-label="Sections"><button data-lt="setup" aria-pressed="${leadTab==="setup"}">School setup</button><button data-lt="classes" aria-pressed="${leadTab==="classes"}">Classes and students</button><button data-lt="staff" aria-pressed="${leadTab==="staff"}">Staff and school code</button></div><div id="leadBody"></div>`;
+    app.innerHTML = `<div class="navtabs" role="group" aria-label="Sections"><button data-lt="sheets" aria-pressed="${leadTab==="sheets"}">Class sheets</button><button data-lt="setup" aria-pressed="${leadTab==="setup"}">School setup</button><button data-lt="classes" aria-pressed="${leadTab==="classes"}">Classes and students</button><button data-lt="staff" aria-pressed="${leadTab==="staff"}">Staff and school code</button></div><div id="leadBody"></div>`;
     app.querySelectorAll("[data-lt]").forEach(b => b.onclick = () => { leadTab = b.dataset.lt; render(); });
     const body = document.getElementById("leadBody");
     if (leadTab === "setup") return TNSetup.open({ sb, school, profile: p, el: body });
     if (leadTab === "classes") return TNClasses.open({ sb, school, profile: p, el: body });
+    if (leadTab === "sheets") return classList(school, null, body);
     body.innerHTML = `<div class="grid2"><div class="card"><h2>Your school code</h2><p class="note">Give this code to your teachers. They create an account, choose “Join my school” and enter it. You then approve them below.</p><div class="code">${esc(school.join_code)}</div></div></div>
       <div class="card"><h2>Staff</h2><p class="note">Approve teachers who have joined and choose their role.</p><div id="members" class="tablewrap"><p class="note">Loading…</p></div></div>`;
     return leadPanel(p, school);
@@ -256,7 +280,26 @@ async function render(){
   const { data: setups } = await sb.from("school_setups").select("status,year").eq("school_id", school.id).order("updated_at", { ascending: false }).limit(1);
   const ready = setups && setups[0] && setups[0].status === "live";
   app.innerHTML = `<div class="card"><h2>${esc(school.name)}</h2><p class="note">Welcome, ${esc((p.full_name||"").split(" ")[0])}. ${ready ? `Your school’s setup for ${esc(setups[0].year)} is ready. ` : "Your school lead is still setting up TwigNest. Your classes will appear here once it’s ready."}</p></div>`;
-  if (ready) TNClasses.myClasses({ sb, school, profile: p, el: app });
+  if (ready) { const box = document.createElement("div"); app.appendChild(box); classList(school, p.id, box); }
+}
+
+async function classList(school, teacherId, el){
+  const { data: setups } = await sb.from("school_setups").select("year,config").eq("school_id", school.id).order("updated_at", { ascending: false }).limit(1);
+  if (!setups || !setups.length) { el.innerHTML = `<div class="card"><h2>Class sheets</h2><p class="note">Finish the school setup first.</p></div>`; return; }
+  const year = setups[0].year, grades = setups[0].config.grades || [];
+  let q = sb.from("classes").select("*").eq("school_id", school.id).eq("year", year).order("name");
+  if (teacherId) { const { data: l } = await sb.from("class_teachers").select("class_id").eq("teacher_id", teacherId); const ids = (l || []).map(x => x.class_id);
+    if (!ids.length) { el.innerHTML = `<div class="card"><h2>My classes</h2><p class="note">You haven’t been added to a class yet. Your school lead adds you to your classes.</p></div>`; return; }
+    q = q.in("id", ids); }
+  const { data: cls, error } = await q; if (error) { el.innerHTML = `<div class="card"><div class="msg err">${esc(error.message)}</div></div>`; return; }
+  if (!cls.length) { el.innerHTML = `<div class="card"><h2>Class sheets</h2><p class="note">No classes yet. Add them in Classes and students.</p></div>`; return; }
+  const { data: st } = await sb.from("students").select("id,class_id").in("class_id", cls.map(c => c.id)).eq("archived", false);
+  const gname = id => (grades.find(g => g.id === id) || {}).name || "Other";
+  el.innerHTML = `<div class="card"><h2>${teacherId ? "My classes" : "Class sheets"}, ${esc(year)}</h2><p class="note">Choose a class to open its sheet.</p>
+    <div class="grid2" style="margin-top:12px">${cls.map(c => { const n = (st || []).filter(s => s.class_id === c.id).length;
+      return `<button class="colcard classbtn" data-open="${c.id}" style="margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit"><b style="font-family:Poppins,sans-serif;font-size:18px;color:var(--plum)">${esc(c.name)}</b><div class="note">${esc(gname(c.grade_id))}, ${n} student${n === 1 ? "" : "s"}</div></button>`; }).join("")}</div></div>`;
+  el.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { const c = cls.find(x => x.id === b.dataset.open);
+    TNSheet.open({ sb, cls: c, el, back: () => { TNSheet.close(); classList(school, teacherId, el); } }); });
 }
 
 sb.auth.onAuthStateChange((event) => {
