@@ -140,7 +140,7 @@
     const gapsH = pl.gaps.length ? `<ul class="plan">${pl.gaps.map(g => `<li>${g.pri === 0 ? badge("below", "Priority") : g.pri === 2 ? badge("none", "Check") : ""} <b>${esc(g.nm)}.</b> ${esc(g.gap)}<div class="fix">${esc(g.fix)}</div></li>`).join("")}</ul>` : `<p class="ok">No gaps recorded.</p>`;
     const aheadH = pl.ahead.length ? `<ul class="plan">${pl.ahead.map(a => `<li><b>${esc(a.nm)}.</b> ${esc(a.text)}</li>`).join("")}</ul>` : `<p class="note">Next steps appear here once a strand has no gaps.</p>`;
     let d = document.getElementById("tnProfile"); if (!d) { d = document.createElement("dialog"); d.id = "tnProfile"; document.body.appendChild(d); }
-    d.innerHTML = `<div class="dlg"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="margin:0;color:var(--plum);font-family:Poppins,sans-serif">${esc(s.full_name)}</h2><div class="tags">${(s.groups || []).map(x => `<span class="tag">${esc(x)}</span>`).join("")}</div></div><button class="btn ghost small" data-pclose="1">Close</button></div>
+    d.innerHTML = `<div class="dlg"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="margin:0;color:var(--plum);font-family:Poppins,sans-serif">${esc(s.full_name)}</h2><div class="tags">${(s.groups || []).map(x => `<span class="tag">${esc(x)}</span>`).join("")}</div></div><div class="row"><button class="btn small" data-print="${sid}">Print report</button><button class="btn ghost small" data-pclose="1">Close</button></div></div>
       <div class="card"><h2>Overall, ${esc(C.terms[t])}</h2><div class="kpis">${kpi("Overall level", ov ? esc(lab(ov.lv)) : "–")}${kpi("Against grade level", ov ? badge(ov.band, POS[ov.band]) : "–")}${kpi("Progress since baseline", pr ? badge(pr.band, signed(pr.steps) + " · " + PROG[pr.band]) : "–")}${kpi("On track for targets", tr.n ? `${tr.ok} of ${tr.n} strands` : "–")}</div></div>
       <div class="card"><h2>The year at a glance</h2><div class="tablewrap"><table class="sheet"><tr><th style="text-align:left">Subject</th><th>Baseline</th>${C.terms.map(x => `<th>${esc(x)}</th>`).join("")}<th>Target</th><th>Progress</th><th>End of year</th></tr>${yr}</table></div>
         <p class="note">“End of year” projects the student’s current rate of progress to the final term.</p></div>
@@ -184,7 +184,7 @@
     const pct = tot ? Math.round(cnt.approved / tot * 100) : 0, chk = role() === "checker";
     let h = head + `<div class="card"><h2>Report comments, ${esc(C.terms[ui.term])}</h2><div class="meter"><i style="width:${pct}%"></i></div>
       <p class="note">${cnt.approved} of ${tot} approved. ${cnt.ready} ready to check, ${cnt.changes} need changes, ${cnt.draft} drafts, ${cnt.none} not started.</p>
-      <div class="row">${chk ? `<button class="btn" data-rp="next">Check the next comment</button>` : `<button class="btn" data-rp="draftall">Draft all empty comments from the data</button>`}<button class="btn ghost" data-rp="export">Export approved comments (Excel)</button></div>
+      <div class="row">${chk ? `<button class="btn" data-rp="next">Check the next comment</button>` : `<button class="btn" data-rp="draftall">Draft all empty comments from the data</button>`}<button class="btn ghost" data-rp="export">Export approved comments (Excel)</button><button class="btn ghost" data-rp="printall">Print all reports</button></div>
       <p class="note">Drafts use each student’s level, a Low, Middle or High comment from the school’s bank, a strength and a next step from their data. Always read and edit before sending for checking.</p></div>`;
     let tb = `<thead><tr><th class="namecol">Student</th>${list.map(([a, b]) => `<th class="colh"><b>${esc(sname(a, b))}</b></th>`).join("")}</tr></thead><tbody>`;
     vs.forEach(s => { tb += `<tr><td class="namecol"><b style="color:var(--plum)">${esc(s.full_name)}</b></td>`;
@@ -231,6 +231,7 @@
   }
   async function reportAction(a, t) {
     if (a === "export") return exportCSV();
+    if (a === "printall") return printReports(visible());
     if (a === "draftall") { const rows = []; visible().forEach(s => strands().forEach(([, st]) => { const c = cmt(String(ui.term), s.id, st.id); if (!c || !c.text) { const d = draft(s.id, st, ui.term); if (d.text) rows.push({ student_id: s.id, strand_id: st.id, term: String(ui.term), text: d.text, level: d.lv, band: d.band, status: "draft", note: "" }); } }));
       rows.forEach(r => (((CM[r.term] = CM[r.term] || {})[r.student_id] = (CM[r.term] || {})[r.student_id] || {}))[r.strand_id] = r); render(); if (rows.length) run(ctx.sb.from("report_comments").upsert(rows)); return; }
     if (a === "next") { for (const s of visible()) for (const [, st] of strands()) { const c = cmt(String(ui.term), s.id, st.id); if (c && c.status === "ready") return openEditor(s.id, st.id); } return alert("There are no comments waiting to be checked."); }
@@ -243,6 +244,25 @@
     if (a === "return") { if (!document.getElementById("edNote").value.trim()) return alert("Add a note so the teacher knows what to change."); await saveEd("changes"); dlg.close(); return render(); }
     if (a === "approve") { await saveEd("approved"); dlg.close(); return render(); }
     if (a === "prev" || a === "next1") { if (role() !== "checker" && !["ready", "approved"].includes(ED.c.status)) await saveEd(); const p = ED.pos + (a === "next1" ? 1 : -1), [sid, stid] = ED.order[p].split("|"); render(); return openEditor(sid, stid); }
+  }
+
+  function reportHTML(s) {
+    const t = ui.term, k = String(t), all = allStrands(), ov = avgEval(s.id, all, k), pr = avgProgress(s.id, all, t);
+    let rows = "";
+    C.subjects.forEach(sb => sb.strands.forEach((st, i) => { const e = strandEval(s.id, st, k), p = progress(s.id, st, t), ot = onTrack(s.id, st, t), cm = cmt(k, s.id, st.id);
+      rows += `<tr><td><b>${esc(sb.name)}</b>${sb.name !== st.name ? `<br>${esc(st.name)}` : ""}</td><td>${esc(lab(level(s.id, st, "b")))}</td><td>${esc(lab(level(s.id, st, k)))}</td><td>${e ? POS[e.band] : "–"}</td><td>${p ? PROG[p.band] : "–"}</td><td>${ot == null ? "–" : ot.ok ? "On track" : "Needs support"}</td></tr>
+        ${cm && cm.status === "approved" && cm.text ? `<tr class="cm"><td colspan="6">${esc(cm.text)}</td></tr>` : ""}`; }));
+    const pl = plan(s.id, t), next = pl.gaps.filter(g => g.pri < 2).slice(0, 3).map(g => `${g.nm}: ${g.fix}`).concat(pl.ahead.slice(0, 2).map(a => `${a.nm}: ${a.text}`));
+    return `<section class="rep"><div class="rh"><img src="logo.png" alt=""><div><h1>${esc(s.full_name)}</h1><p>${esc(ctx.schoolName || "")}${ctx.schoolName ? ", " : ""}${esc(cls.name)}. ${esc(C.terms[t])} report, ${esc(cls.year)}</p></div></div>
+      <p class="sum"><b>Overall:</b> level ${ov ? esc(lab(ov.lv)) : "–"}, ${ov ? POS[ov.band].toLowerCase() : "not yet assessed"}. Progress since the start of the year: ${pr ? PROG[pr.band].toLowerCase() : "–"}.</p>
+      <table><thead><tr><th>Subject</th><th>Start of year</th><th>Now</th><th>Against grade level</th><th>Progress</th><th>End-of-year target</th></tr></thead><tbody>${rows}</tbody></table>
+      ${next.length ? `<h2>Next steps</h2><ul>${next.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>`;
+  }
+  function printReports(list) {
+    let p = document.getElementById("tnPrint"); if (!p) { p = document.createElement("div"); p.id = "tnPrint"; document.body.appendChild(p); }
+    p.innerHTML = list.map(reportHTML).join("");
+    document.querySelectorAll("dialog[open]").forEach(d => d.close());
+    setTimeout(() => window.print(), 300);
   }
 
   async function load() {
@@ -337,6 +357,7 @@
   async function onClick(e) {
     const t = e.target.closest("button"); if (!t || !ctx || !(ctx.el.contains(t) || t.closest("#tnProfile") || t.closest("#tnEditor"))) return;
     if (t.dataset.pclose) return t.closest("dialog").close();
+    if (t.dataset.print) return printReports([studs.find(x => x.id === t.dataset.print)]);
     if (t.dataset.rp) { t.disabled = true; try { await reportAction(t.dataset.rp, t); } finally { t.disabled = false; } return; }
     if (t.dataset.edit) { const [a, b] = t.dataset.edit.split("|"); return openEditor(a, b); }
     if (t.dataset.pstrand) { ui.pStrand = t.dataset.pstrand; return openProfile(ui.pid); }

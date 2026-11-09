@@ -90,6 +90,13 @@ table.sheet th.colh{white-space:normal;min-width:90px;max-width:130px}table.shee
 .classbtn:hover{border-color:var(--plum-2)}
 .statusbtn{border:0;border-radius:999px;padding:5px 12px;font-weight:800;font-size:12.5px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}.statusbtn span{font-weight:600;opacity:.75;font-size:11.5px}
 dialog#tnResults{border:0;border-radius:18px;padding:0;width:min(820px,95vw);max-height:92vh;background:var(--card);color:var(--ink)}dialog#tnResults::backdrop{background:rgba(40,25,60,.45)}
+#tnPrint{display:none}
+@media print{body>*:not(#tnPrint){display:none!important}#tnPrint{display:block!important;color:#000;font-family:Nunito,Arial,sans-serif}
+.rep{page-break-after:always;padding:6mm 4mm}.rep:last-child{page-break-after:auto}
+body{background:#fff!important}.rep .rh{display:flex;gap:14px;align-items:center;border-bottom:2px solid #462D5B;padding-bottom:8px;margin-bottom:10px}.rep .rh img{height:44px}
+.rep h1{display:block!important;margin:0;font-size:22px;color:#462D5B;font-family:Poppins,Arial,sans-serif}.rep .rh p{margin:2px 0 0;font-size:12px;color:#555}
+.rep .sum{font-size:13px}.rep table{width:100%;border-collapse:collapse;font-size:12px}.rep th,.rep td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top}
+.rep th{background:#F2ECF7}.rep tr.cm td{font-size:12px;line-height:1.5;background:#fff}.rep h2{font-size:15px;color:#462D5B;margin:14px 0 4px}.rep ul{font-size:12px;margin:0;padding-left:18px}}
 dialog#tnEditor{border:0;border-radius:18px;padding:0;width:min(760px,95vw);max-height:92vh;background:var(--card);color:var(--ink)}dialog#tnEditor::backdrop{background:rgba(40,25,60,.45)}
 .sbar{display:flex;height:16px;border-radius:999px;overflow:hidden;background:var(--bg);margin:6px 0}.sbar i{display:block}
 .meter{height:10px;border-radius:999px;background:var(--bg);overflow:hidden;margin:6px 0}.meter i{display:block;height:100%;background:var(--sage)}
@@ -326,7 +333,7 @@ async function classList(school, teacherId, el, role){
   }
   el.innerHTML = groups.map((g, gi) => `<div class="card"><h2>${esc(g.title)}, ${esc(year)}</h2><p class="note">${g.note}</p><div class="grid2" style="margin-top:12px">${g.list.map(c => btn(c, gi + "|" + c.id)).join("")}</div></div>`).join("");
   el.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { const [gi, id] = b.dataset.open.split("|"), g = groups[+gi], c = g.list.find(x => x.id === id);
-    TNSheet.open({ sb, cls: c, el, role, subjects: g.subjects, siblings: g.list, back: () => { TNSheet.close(); classList(school, teacherId, el, role); } }); });
+    TNSheet.open({ sb, cls: c, el, role, subjects: g.subjects, siblings: g.list, schoolName: school.name, back: () => { TNSheet.close(); classList(school, teacherId, el, role); } }); });
 }
 
 sb.auth.onAuthStateChange((event) => {
