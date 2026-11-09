@@ -1,0 +1,138 @@
+/* TwigNest school view */
+(function () {
+  const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const clamp = n => Math.max(0, Math.min(1, n));
+  const POS = { below: "Below grade level", inline: "In line", above: "Above grade level", none: "Not yet assessed" };
+  const badge = (c, t) => `<span class="badge b-${c}">${t}</span>`;
+  let ctx, C, year, classes = [], studs = [], R = {}, ST = {}, LV = {}, TG = {}, bound = false;
+  let ui = { mode: "subject", term: 0, group: "All", grade: "All" };
+
+  async function fetchAll(table, cols) {
+    const out = []; for (let from = 0; ; from += 1000) {
+      const { data, error } = await ctx.sb.from(table).select(cols).range(from, from + 999);
+      if (error) throw error; out.push(...data); if (data.length < 1000) break;
+    } return out;
+  }
+  async function load() {
+    const sb = ctx.sb, sid = ctx.school.id;
+    const s = await sb.from("school_setups").select("*").eq("school_id", sid).order("updated_at", { ascending: false }).limit(1);
+    if (s.error) throw s.error; if (!s.data.length) throw new Error("Finish the school setup first.");
+    C = s.data[0].config; year = s.data[0].year;
+    const c = await sb.from("classes").select("*").eq("school_id", sid).eq("year", year); if (c.error) throw c.error; classes = c.data;
+    const ids = new Set(classes.map(x => x.id));
+    studs = (await fetchAll("students", "*")).filter(x => !x.archived && ids.has(x.class_id));
+    const sIds = new Set(studs.map(x => x.id));
+    R = {}; ST = {}; LV = {}; TG = {};
+    (await fetchAll("results", "student_id,col_id,term,value")).forEach(x => { if (!sIds.has(x.student_id)) return; const a = R[x.student_id] = R[x.student_id] || {}; (a[x.col_id] = a[x.col_id] || {})[x.term] = x.value; });
+    (await fetchAll("objective_status", "student_id,obj_id,status")).forEach(x => { if (sIds.has(x.student_id)) (ST[x.student_id] = ST[x.student_id] || {})[x.obj_id] = x.status; });
+    (await fetchAll("levels", "student_id,strand_id,term,level")).forEach(x => { if (!sIds.has(x.student_id)) return; const a = LV[x.student_id] = LV[x.student_id] || {}; (a[x.strand_id] = a[x.strand_id] || {})[x.term] = x.level; });
+    (await fetchAll("taught", "class_id,obj_id")).forEach(x => (TG[x.class_id] = TG[x.class_id] || new Set()).add(x.obj_id));
+  }
+
+  const strands = () => { const o = []; C.subjects.forEach(sb => sb.strands.forEach(st => o.push([sb, st]))); return o; };
+  const clsOf = s => classes.find(c => c.id === s.class_id);
+  const objsFor = (c, gid, t) => ((c.objectives || {})[gid] || [])[t] || [];
+  const val = (sid, cid, k) => ((R[sid] || {})[cid] || {})[k];
+  const stat = (sid, oid) => (ST[sid] || {})[oid] || "";
+  function levelFromPct(p) { let lv = 0; C.gradeMin.forEach((x, i) => { if (p >= x) lv = i; }); return lv; }
+  function colEval(s, c, k) {
+    if (c.type === "comment") return null;
+    if (c.type === "objectives") {
+      if (k === "b") return null; const cl = clsOf(s), tg = TG[cl.id] || new Set(); let a = 0, sec = 0, ex = 0;
+      objsFor(c, cl.grade_id, +k).filter(o => tg.has(o.id)).forEach(o => { const v = stat(s.id, o.id); if (v) { a++; if (v !== "n") sec++; if (v === "e") ex++; } });
+      if (!a) return null; const p = sec / a * 100, e = ex / a * 100; return { band: p < c.belowPct ? -1 : (p >= 90 && e >= c.abovePct) ? 1 : 0, norm: clamp(p / 100) };
+    }
+    const v = val(s.id, c.id, k); if (v === undefined || v === "") return null;
+    const pos = C.gradePos, gm = C.gradeMin, iS = (gm[pos.indexOf("inline")] ?? 50) / 100, aS = (gm[pos.indexOf("above")] ?? 90) / 100;
+    const piece = (x, lo, hi, ls, hs) => x < lo ? iS * clamp((x - (lo - ls)) / ls) * .999 : x < hi ? iS + (aS - iS) * (x - lo) / (hi - lo) : aS + (1 - aS) * clamp((x - hi) / hs);
+    if (c.type === "list") { const i = c.options.indexOf(v); if (i < 0) return null; const n = c.options.length;
+      return { band: i < c.below ? -1 : i >= c.above ? 1 : 0, norm: i < c.below ? iS * (i + .5) / c.below : i < c.above ? iS + (aS - iS) * (i - c.below + .5) / (c.above - c.below) : aS + (1 - aS) * (i - c.above + .5) / (n - c.above) }; }
+    const n = +v; if (isNaN(n)) return null;
+    if (c.type === "standardised") return { band: n < c.below ? -1 : n >= c.above ? 1 : 0, norm: piece(n, c.below, c.above, 30, 15) };
+    if (c.type === "readingAge") return { band: n < c.below ? -1 : n > c.above ? 1 : 0, norm: piece(n, c.below, c.above + .0001, 1.5, 1.5) };
+    return { band: n < c.below ? -1 : n >= c.above ? 1 : 0, norm: clamp(n / c.max) };
+  }
+  function strandEval(s, st, k) {
+    const ev = st.cols.filter(c => k === "b" ? c.baseline : !c.baseline).map(c => colEval(s, c, k)).filter(Boolean); if (!ev.length) return null;
+    const pct = ev.reduce((a, x) => a + x.norm, 0) / ev.length * 100, sug = levelFromPct(pct); return { band: C.gradePos[sug] || "inline", sug };
+  }
+  function level(s, st, k) { const t = ((LV[s.id] || {})[st.id] || {})[k]; if (t !== undefined && t !== null) return t; const e = strandEval(s, st, k); return e ? e.sug : null; }
+  function progress(s, st, t) { const b = level(s, st, "b"), c = level(s, st, String(t)); if (b == null || c == null) return null; const steps = c - b, exp = C.steps * (t + 1) / C.terms.length; return { band: steps < exp - .5 ? "below" : steps > exp + .5 ? "above" : "inline" }; }
+  function onTrack(s, st, t) { const b = level(s, st, "b"), c = level(s, st, String(t)); if (b == null || c == null) return null; const max = C.scale.length - 1; return Math.min(max, Math.round(b + (c - b) / (t + 1) * C.terms.length)) >= Math.min(max, b + C.steps); }
+  function avgBand(s, list, k) { const bs = list.map(st => strandEval(s, st, k)).filter(Boolean).map(e => ({ below: -1, inline: 0, above: 1 })[e.band]); if (!bs.length) return null; const b = bs.reduce((a, x) => a + x, 0) / bs.length; return b < -.33 ? "below" : b > .33 ? "above" : "inline"; }
+  function avgProg(s, list, t) { const ps = list.map(st => progress(s, st, t)).filter(Boolean).map(p => ({ below: -1, inline: 0, above: 1 })[p.band]); if (!ps.length) return null; const b = ps.reduce((a, x) => a + x, 0) / ps.length; return b < -.33 ? "below" : b > .33 ? "above" : "inline"; }
+
+  function summarise(list, sts, t) {
+    const k = String(t), a = { below: 0, inline: 0, above: 0, none: 0 }, p = { below: 0, inline: 0, above: 0, none: 0 }; let ok = 0, n = 0;
+    list.forEach(s => { a[avgBand(s, sts, k) || "none"]++; p[avgProg(s, sts, t) || "none"]++; sts.forEach(st => { const o = onTrack(s, st, t); if (o !== null) { n++; if (o) ok++; } }); });
+    return { a, p, ok, n };
+  }
+  function coverage(sts, t, list) {
+    let tot = 0, tg = 0; const cls = [...new Set(list.map(s => s.class_id))].map(id => classes.find(c => c.id === id)).filter(Boolean);
+    cls.forEach(cl => sts.forEach(st => st.cols.filter(c => c.type === "objectives").forEach(c => objsFor(c, cl.grade_id, t).forEach(o => { tot++; if ((TG[cl.id] || new Set()).has(o.id)) tg++; }))));
+    return tot ? [tg, tot] : null;
+  }
+  const bar = (c, n) => { const w = x => (c[x] || 0) / (n || 1) * 100; return `<div class="sbar" aria-hidden="true"><i style="width:${w("below")}%;background:var(--red)"></i><i style="width:${w("inline")}%;background:var(--sage)"></i><i style="width:${w("above")}%;background:var(--plum)"></i></div>`; };
+  function groupTable(sts, t) {
+    let h = `<div class="tablewrap"><table class="small"><tr><th style="text-align:left">Group</th><th>Below</th><th>In line</th><th>Above</th><th>Expected progress+</th></tr>`;
+    ["All", ...(C.groups || [])].forEach(g => { const gs = filtered(g), r = summarise(gs, sts, t), known = gs.length - r.p.none;
+      h += `<tr><td style="text-align:left">${g === "All" ? "All students" : esc(g)} (${gs.length})</td><td>${r.a.below}</td><td>${r.a.inline}</td><td>${r.a.above}</td><td>${known ? Math.round((r.p.inline + r.p.above) / known * 100) + "%" : "–"}</td></tr>`; });
+    return h + `</table></div>`;
+  }
+  function card(title, list, sts, t, extra) {
+    const r = summarise(list, sts, t), n = list.length, known = n - r.p.none, cv = coverage(sts, t, list);
+    return `<div class="card" style="margin:0"><h2>${title}</h2>
+      ${cv ? `<p class="note" style="margin:0">Curriculum coverage: ${cv[0]} of ${cv[1]} objectives taught</p><div class="meter"><i style="width:${cv[0] / cv[1] * 100}%"></i></div>` : ""}
+      <h3>Attainment against grade level</h3>${bar(r.a, n)}<p class="note" style="margin:0">Below ${r.a.below}, in line ${r.a.inline}, above ${r.a.above}${r.a.none ? `, no data yet ${r.a.none}` : ""}</p>
+      <h3>Progress since baseline</h3>${bar(r.p, n)}<p class="note" style="margin:0">Below expected ${r.p.below}, expected ${r.p.inline}, above expected ${r.p.above}${known ? `. ${Math.round((r.p.inline + r.p.above) / known * 100)}% making expected progress or better` : ""}</p>
+      <h3>On track for end-of-year targets</h3><p class="note" style="margin:0">${r.n ? `${r.ok} of ${r.n} student targets (${Math.round(r.ok / r.n * 100)}%)` : "–"}</p>
+      <h3>By group</h3>${groupTable(sts, t)}${extra || ""}</div>`;
+  }
+  const filtered = g => studs.filter(s => (g === "All" || (s.groups || []).includes(g)) && (ui.grade === "All" || (clsOf(s) || {}).grade_id === ui.grade) && (ui.group === "All" || (s.groups || []).includes(ui.group)));
+
+  function render() {
+    const t = ui.term, list = filtered("All"), grades = C.grades || [];
+    let h = `<div class="row" style="margin-bottom:10px"><button class="pill2" data-smode="subject" aria-pressed="${ui.mode === "subject"}">By subject (overall)</button><button class="pill2" data-smode="strand" aria-pressed="${ui.mode === "strand"}">By strand (detail)</button>
+      <label class="note" for="svGrade" style="margin-left:8px"><b>Grade</b></label><select id="svGrade" style="width:auto"><option value="All">All grades</option>${grades.map(g => `<option value="${g.id}" ${g.id === ui.grade ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select></div>
+      <div class="row" style="margin-bottom:8px">${C.terms.map((x, i) => `<button class="chip" data-sterm="${i}" aria-pressed="${i === t}">${esc(x)}</button>`).join("")}</div>
+      <div class="row" style="margin-bottom:14px">${["All", ...(C.groups || [])].map(g => `<button class="chip" data-sgrp="${esc(g)}" aria-pressed="${g === ui.group}">${g === "All" ? "All students" : esc(g)}</button>`).join("")}</div>`;
+    if (!list.length) { ctx.el.innerHTML = h + `<div class="card"><p class="note">No students match these filters yet.</p></div>`; return; }
+    if (ui.mode === "subject") {
+      const all = strands().map(p => p[1]);
+      h += card(`${ui.grade === "All" ? "Whole school" : esc((grades.find(g => g.id === ui.grade) || {}).name)}, all subjects`, list, all, t) + `<div class="grid2" style="margin-top:16px">`;
+      C.subjects.forEach(sb => {
+        const weak = sb.strands.map(st => [st.name, list.filter(s => { const e = strandEval(s, st, String(t)); return e && e.band === "below"; }).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1]);
+        const ex = sb.strands.length > 1 ? `<h3>Strands to focus on</h3>${weak.length ? weak.map(([n, c]) => `<div class="flagrow">${badge("below", c)} below in ${esc(n)}</div>`).join("") : `<p class="note">No strands with students below.</p>`}<p><button class="btn ghost small" data-smode="strand">See strand detail</button></p>` : "";
+        h += card(esc(sb.name), list, sb.strands, t, ex);
+      });
+      ctx.el.innerHTML = h + `</div>`; return;
+    }
+    h += `<div class="grid2">`;
+    strands().forEach(([sb, st]) => {
+      const flags = [], k = String(t);
+      st.cols.forEach(c => {
+        if (c.type === "objectives") {
+          const map = {}; list.forEach(s => { const cl = clsOf(s), tg = TG[cl.id] || new Set(); objsFor(c, cl.grade_id, t).filter(o => tg.has(o.id)).forEach(o => { const m = map[o.id] = map[o.id] || { text: o.text, na: 0, ny: 0, n: 0 }; m.n++; const v = stat(s.id, o.id); if (!v) m.na++; if (v === "n") m.ny++; }); });
+          Object.values(map).forEach(m => { if (m.na) flags.push(`${badge("none", m.na)} not assessed: ${esc(m.text)}`); if (m.ny >= Math.max(2, m.n / 3)) flags.push(`${badge("below", m.ny)} not yet secure: ${esc(m.text)}. Consider re-teaching to the group.`); });
+        } else if (c.type !== "comment") { const kk = c.baseline ? "b" : k, x = list.filter(s => val(s.id, c.id, kk) == null).length; if (x) flags.push(`${badge("none", x)} missing: ${esc(c.name)}`); }
+      });
+      h += card(esc(sb.name === st.name ? sb.name : `${sb.name}: ${st.name}`), list, [st], t, `<h3>Needs attention</h3>${flags.length ? flags.slice(0, 12).map(f => `<div class="flagrow">${f}</div>`).join("") + (flags.length > 12 ? `<p class="note">…and ${flags.length - 12} more.</p>` : "") : `<p class="note">All data recorded.</p>`}`);
+    });
+    ctx.el.innerHTML = h + `</div>`;
+  }
+
+  function onClick(e) { const b = e.target.closest("button"); if (!b || !ctx || !ctx.el.contains(b)) return;
+    if (b.dataset.smode) { ui.mode = b.dataset.smode; render(); window.scrollTo(0, 0); }
+    if (b.dataset.sterm) { ui.term = +b.dataset.sterm; render(); }
+    if (b.dataset.sgrp) { ui.group = b.dataset.sgrp; render(); } }
+  function onChange(e) { if (e.target.id === "svGrade" && ctx && ctx.el.contains(e.target)) { ui.grade = e.target.value; render(); } }
+
+  window.TNSchool = {
+    async open(context) {
+      ctx = context; if (!bound) { document.addEventListener("click", onClick); document.addEventListener("change", onChange); bound = true; }
+      ctx.el.innerHTML = `<div class="card"><p class="note">Loading the school view…</p></div>`;
+      try { await load(); render(); } catch (err) { ctx.el.innerHTML = `<div class="card"><div class="msg err">${esc(err.message || err)}</div></div>`; }
+    },
+    close() { ctx = null; }
+  };
+})();

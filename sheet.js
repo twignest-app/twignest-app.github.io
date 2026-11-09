@@ -6,7 +6,7 @@
   const POS = { below: "Below grade level", inline: "In line", above: "Above grade level", none: "Not yet assessed" };
   const PROG = { below: "Below expected", inline: "Expected", above: "Above expected" };
   const badge = (c, t) => `<span class="badge b-${c}">${t}</span>`;
-  let ctx, C, cls, studs = [], R = {}, ST = {}, TAUGHT = new Set(), LV = {}, ui = { sub: null, strand: null, term: 0, group: "All", mode: "overview", pStrand: null, pid: null }, bound = false, pending = 0;
+  let ctx, C, cls, studs = [], R = {}, ST = {}, TAUGHT = new Set(), LV = {}, CM = {}, ED = null, ui = { sub: null, strand: null, term: 0, group: "All", mode: "overview", pStrand: null, pid: null }, bound = false, pending = 0;
 
   const strands = () => { const o = []; C.subjects.forEach(sb => sb.strands.forEach(st => o.push([sb, st]))); return o; };
   const findStrand = id => strands().find(p => p[1].id === id) || [null, null];
@@ -150,6 +150,101 @@
     if (!d.open) d.showModal();
   }
 
+  const BANDS = ["Low", "Middle", "High"];
+  const STATUS = { none: ["none", "Not started"], draft: ["none", "Draft"], ready: ["above", "Ready to check"], changes: ["below", "Changes needed"], approved: ["inline", "Approved"] };
+  const cmt = (t, sid, stid) => ((CM[t] || {})[sid] || {})[stid] || null;
+  const role = () => ctx.role || "teacher";
+  function autoBand(sid, st, k) {
+    const lv = level(sid, st, k), e = strandEval(sid, st, k); if (lv == null || !e) return 1;
+    const m = C.gradeMin, lo = m[lv], hi = m[lv + 1] ?? 100.0001; if (e.pct < lo) return 0; if (e.pct >= hi) return 2;
+    const f = (e.pct - lo) / Math.max(.0001, hi - lo); return f < 1 / 3 ? 0 : f >= 2 / 3 ? 2 : 1;
+  }
+  function draft(sid, st, t, lvO, bandO) {
+    const k = String(t), s = studs.find(x => x.id === sid), si = studs.indexOf(s), ti = strands().findIndex(p => p[1].id === st.id);
+    const lv = lvO ?? level(sid, st, k); if (lv == null) return { text: "", lv: null, band: 1 };
+    const band = bandO ?? autoBand(sid, st, k), bank = (C.reports || {}).bank || [], row = bank[lv] || [], nm = s.full_name.split(" ")[0];
+    const fill = x => (x || "").replace(/\{name\}/g, nm).replace(/\{strand\}/g, st.name.toLowerCase());
+    let base = fill(row[band] || row[1] || ""); const pre = ["", "This term, ", "Throughout the term, ", "Over recent weeks, "][(si + ti) % 4];
+    if (pre && base.startsWith(nm)) base = pre + base;
+    const sec = [], gaps = [];
+    st.cols.filter(c => c.type === "objectives").forEach(c => { for (let i = 0; i <= t; i++) objs(c, i).forEach(o => { const v = stat(sid, o.id); if (v === "e") sec.unshift(o); else if (v === "s") sec.push(o); else if (v === "n") gaps.push(o); }); });
+    const lc = x => x.charAt(0).toLowerCase() + x.slice(1).replace(/^know /i, "understand ");
+    let str = ""; if (sec.length) { const o = sec[si % Math.min(2, sec.length)];
+      str = [` A particular strength is that ${nm} can ${lc(o.text)}.`, ` ${nm} can now ${lc(o.text)} with confidence.`, ` ${nm} has shown that they can ${lc(o.text)}.`][(si + ti) % 3]; }
+    const e = strandEval(sid, st, k); let nx;
+    if (gaps.length) nx = ` Next step: ${gaps[0].step || "further practice to " + lc(gaps[0].text) + "."}`;
+    else { const low = st.cols.filter(c => !c.baseline && c.type !== "objectives").map(c => [c, colEval(sid, c, k)]).find(([, x]) => x && x.band < 0);
+      nx = low ? ` Next step: ${fixFor(low[0], sid, k)}` : e && e.band === "above" ? " Next step: take on greater-depth challenges that stretch thinking further." : " Next step: continue to apply and consolidate this learning in new contexts."; }
+    let text = base + str + nx; const lim = (C.reports || {}).limit || 600; if (text.length > lim) text = base + nx;
+    return { text: text.trim(), lv, band };
+  }
+  function renderReports(head) {
+    const t = String(ui.term), list = strands(), vs = visible(); let tot = 0; const cnt = { none: 0, draft: 0, ready: 0, changes: 0, approved: 0 };
+    vs.forEach(s => list.forEach(([, st]) => { tot++; const c = cmt(t, s.id, st.id); cnt[c ? c.status : "none"]++; }));
+    const pct = tot ? Math.round(cnt.approved / tot * 100) : 0, chk = role() === "checker";
+    let h = head + `<div class="card"><h2>Report comments, ${esc(C.terms[ui.term])}</h2><div class="meter"><i style="width:${pct}%"></i></div>
+      <p class="note">${cnt.approved} of ${tot} approved. ${cnt.ready} ready to check, ${cnt.changes} need changes, ${cnt.draft} drafts, ${cnt.none} not started.</p>
+      <div class="row">${chk ? `<button class="btn" data-rp="next">Check the next comment</button>` : `<button class="btn" data-rp="draftall">Draft all empty comments from the data</button>`}<button class="btn ghost" data-rp="export">Export approved comments (Excel)</button></div>
+      <p class="note">Drafts use each student’s level, a Low, Middle or High comment from the school’s bank, a strength and a next step from their data. Always read and edit before sending for checking.</p></div>`;
+    let tb = `<thead><tr><th class="namecol">Student</th>${list.map(([a, b]) => `<th class="colh"><b>${esc(sname(a, b))}</b></th>`).join("")}</tr></thead><tbody>`;
+    vs.forEach(s => { tb += `<tr><td class="namecol"><b style="color:var(--plum)">${esc(s.full_name)}</b></td>`;
+      list.forEach(([a, b]) => { const c = cmt(t, s.id, b.id), [cl, l] = STATUS[c ? c.status : "none"];
+        tb += `<td><button class="statusbtn b-${cl}" data-edit="${s.id}|${b.id}">${l}${c && c.text ? `<span>${c.text.length}</span>` : ""}</button></td>`; }); tb += `</tr>`; });
+    ctx.el.innerHTML = h + `<div class="sheetwrap"><table class="sheet">${tb}</tbody></table></div><div id="rpMsg"></div>`;
+  }
+  function openEditor(sid, stid) {
+    const t = String(ui.term), s = studs.find(x => x.id === sid), [sb, st] = findStrand(stid), chk = role() === "checker";
+    let c = cmt(t, sid, stid); c = c ? { ...c } : { status: "none", note: "" };
+    if (!c.text) { const d = draft(sid, st, ui.term); Object.assign(c, { text: d.text, level: d.lv, band: d.band, auto: true }); }
+    const order = []; visible().forEach(x => strands().forEach(([, b]) => order.push(x.id + "|" + b.id))); const pos = order.indexOf(sid + "|" + stid);
+    ED = { sid, stid, c, order, pos }; const lim = (C.reports || {}).limit || 600, locked = !chk && (c.status === "ready" || c.status === "approved"), lab2 = STATUS[c.status || "none"];
+    let d = document.getElementById("tnEditor"); if (!d) { d = document.createElement("dialog"); d.id = "tnEditor"; document.body.appendChild(d); }
+    d.innerHTML = `<div class="dlg"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="margin:0;color:var(--plum);font-family:Poppins,sans-serif">${esc(s.full_name)}</h2><p class="note" style="margin:2px 0 0">${esc(sname(sb, st))}, ${esc(C.terms[ui.term])} ${badge(lab2[0], lab2[1])}</p></div><button class="btn ghost small" data-pclose="1">Close</button></div>
+      ${c.note ? `<div class="msg info">Checker’s note: ${esc(c.note)}</div>` : ""}
+      <div class="row" style="margin:12px 0"><label class="note" for="edLv"><b>Level</b></label><select id="edLv" style="width:auto" ${locked || chk ? "disabled" : ""}>${C.scale.map((x, i) => `<option value="${i}" ${i === c.level ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>
+        <label class="note" for="edBand"><b>Comment</b></label><select id="edBand" style="width:auto" ${locked || chk ? "disabled" : ""}>${BANDS.map((x, i) => `<option value="${i}" ${i === c.band ? "selected" : ""}>${x}</option>`).join("")}</select>
+        ${!chk && !locked ? `<button class="btn ghost small" data-rp="redraft">Redraft from data</button><button class="btn ghost small" data-rp="own">Write my own</button>` : ""}</div>
+      <textarea id="edText" style="min-height:150px;font-size:15px;line-height:1.6" ${locked ? "readonly" : ""}>${esc(c.text || "")}</textarea>
+      <div class="row" style="justify-content:space-between"><span class="note">${c.auto ? "Drafted from the data. Read and edit before sending." : ""}</span><span id="edCount" class="note"></span></div>
+      ${chk ? `<label for="edNote" class="note" style="display:block;margin-top:10px"><b>Note for the teacher</b></label><textarea id="edNote" style="min-height:60px">${esc(c.note || "")}</textarea>` : ""}
+      <div class="row" style="margin-top:14px">${chk ? `<button class="btn ghost" data-rp="return" ${c.status === "ready" ? "" : "disabled"}>Return with note</button><button class="btn" data-rp="approve" ${["ready", "changes"].includes(c.status) ? "" : "disabled"}>Approve</button>`
+        : locked ? `<span class="note">${c.status === "approved" ? "Approved by the buddy checker." : "Waiting for the buddy checker."}</span><button class="btn ghost small" data-rp="recall">${c.status === "approved" ? "Reopen" : "Take back to edit"}</button>`
+        : `<button class="btn ghost" data-rp="save">Save draft</button><button class="btn" id="edReady" data-rp="send">Send for checking</button>`}
+        <span style="margin-left:auto" class="row"><button class="btn ghost small" data-rp="prev" ${pos <= 0 ? "disabled" : ""}>Previous</button><button class="btn ghost small" data-rp="next1" ${pos >= order.length - 1 ? "disabled" : ""}>Next</button></span></div></div>`;
+    if (!d.open) d.showModal(); count();
+  }
+  function count() { const ta = document.getElementById("edText"), el = document.getElementById("edCount"); if (!ta || !el) return; const n = ta.value.trim().length, lim = (C.reports || {}).limit || 600;
+    el.textContent = `${n} / ${lim}`; el.style.color = n > lim ? "var(--red)" : "var(--muted)"; el.style.fontWeight = n > lim ? "800" : "400"; const b = document.getElementById("edReady"); if (b) b.disabled = !n || n > lim; }
+  async function saveEd(status) {
+    const c = ED.c, ta = document.getElementById("edText"), nt = document.getElementById("edNote"), lv = document.getElementById("edLv"), bd = document.getElementById("edBand");
+    if (ta) c.text = ta.value.trim(); if (nt) c.note = nt.value.trim(); if (lv) c.level = +lv.value; if (bd) c.band = +bd.value;
+    c.status = status || (c.status && c.status !== "none" ? c.status : "draft"); if (status === "approved") c.note = "";
+    const row = { student_id: ED.sid, strand_id: ED.stid, term: String(ui.term), text: c.text || "", level: c.level ?? null, band: c.band ?? 1, status: c.status, note: c.note || "" };
+    const t = String(ui.term); (((CM[t] = CM[t] || {})[ED.sid] = (CM[t] || {})[ED.sid] || {}))[ED.stid] = row;
+    return run(ctx.sb.from("report_comments").upsert(row));
+  }
+  function exportCSV() {
+    const t = String(ui.term), list = strands(), q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    let csv = "\ufeff" + [q("Student"), ...list.map(([a, b]) => q(sname(a, b) + " level") + "," + q(sname(a, b) + " comment"))].join(",") + "\n";
+    studs.forEach(s => { csv += [q(s.full_name), ...list.map(([, b]) => { const c = cmt(t, s.id, b.id); return c && c.status === "approved" ? q(lab(c.level)) + "," + q(c.text) : q("") + "," + q(""); })].join(",") + "\n"; });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = `${cls.name} report comments ${C.terms[ui.term]}.csv`; a.click();
+  }
+  async function reportAction(a, t) {
+    if (a === "export") return exportCSV();
+    if (a === "draftall") { const rows = []; visible().forEach(s => strands().forEach(([, st]) => { const c = cmt(String(ui.term), s.id, st.id); if (!c || !c.text) { const d = draft(s.id, st, ui.term); if (d.text) rows.push({ student_id: s.id, strand_id: st.id, term: String(ui.term), text: d.text, level: d.lv, band: d.band, status: "draft", note: "" }); } }));
+      rows.forEach(r => (((CM[r.term] = CM[r.term] || {})[r.student_id] = (CM[r.term] || {})[r.student_id] || {}))[r.strand_id] = r); render(); if (rows.length) run(ctx.sb.from("report_comments").upsert(rows)); return; }
+    if (a === "next") { for (const s of visible()) for (const [, st] of strands()) { const c = cmt(String(ui.term), s.id, st.id); if (c && c.status === "ready") return openEditor(s.id, st.id); } return alert("There are no comments waiting to be checked."); }
+    if (!ED) return; const dlg = document.getElementById("tnEditor");
+    if (a === "redraft") { const d = draft(ED.sid, findStrand(ED.stid)[1], ui.term, +document.getElementById("edLv").value, +document.getElementById("edBand").value); document.getElementById("edText").value = d.text; return count(); }
+    if (a === "own") { const ta = document.getElementById("edText"); ta.value = ""; ta.focus(); return count(); }
+    if (a === "save") { await saveEd(); dlg.close(); return render(); }
+    if (a === "send") { await saveEd("ready"); dlg.close(); return render(); }
+    if (a === "recall") { await saveEd("draft"); return openEditor(ED.sid, ED.stid); }
+    if (a === "return") { if (!document.getElementById("edNote").value.trim()) return alert("Add a note so the teacher knows what to change."); await saveEd("changes"); dlg.close(); return render(); }
+    if (a === "approve") { await saveEd("approved"); dlg.close(); return render(); }
+    if (a === "prev" || a === "next1") { if (role() !== "checker" && !["ready", "approved"].includes(ED.c.status)) await saveEd(); const p = ED.pos + (a === "next1" ? 1 : -1), [sid, stid] = ED.order[p].split("|"); render(); return openEditor(sid, stid); }
+  }
+
   async function load() {
     const sb = ctx.sb;
     const [s, st] = await Promise.all([
@@ -168,6 +263,8 @@
       r.data.forEach(x => { ((R[x.student_id] = R[x.student_id] || {})[x.col_id] = (R[x.student_id] || {})[x.col_id] || {})[x.term] = x.value; });
       o.data.forEach(x => (ST[x.student_id] = ST[x.student_id] || {})[x.obj_id] = x.status);
       l.data.forEach(x => { ((LV[x.student_id] = LV[x.student_id] || {})[x.strand_id] = (LV[x.student_id] || {})[x.strand_id] || {})[x.term] = x.level; });
+      const cm = await sb.from("report_comments").select("*").in("student_id", ids); if (cm.error) throw cm.error;
+      CM = {}; cm.data.forEach(x => { ((CM[x.term] = CM[x.term] || {})[x.student_id] = (CM[x.term] || {})[x.student_id] || {})[x.strand_id] = x; });
     }
   }
 
@@ -200,14 +297,16 @@
     const bc = st.cols.filter(c => c.baseline), tc = st.cols.filter(c => !c.baseline);
     let n = 0; tc.forEach(c => { n += c.type === "objectives" ? objs(c, t).length : 1; });
     let h = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="row"><button class="btn ghost small" data-sh="back">← Back</button><h2 style="margin:0;font-family:Poppins,sans-serif;color:var(--plum)">${esc(cls.name)}</h2><span class="note">${studs.length} students</span></div><span class="note" id="shSave">All changes saved</span></div>
-      <div class="row" style="margin-bottom:10px"><button class="pill2" data-mode="overview" aria-pressed="${ui.mode === "overview"}">Class overview</button><button class="pill2" data-mode="strand" aria-pressed="${ui.mode === "strand"}">Record data by strand</button></div>
+      <div class="row" style="margin-bottom:10px">${role() === "checker" ? "" : `<button class="pill2" data-mode="overview" aria-pressed="${ui.mode === "overview"}">Class overview</button><button class="pill2" data-mode="strand" aria-pressed="${ui.mode === "strand"}">Record data by strand</button>`}<button class="pill2" data-mode="reports" aria-pressed="${ui.mode === "reports"}">Report comments</button></div>
       <div class="row" style="margin-bottom:10px">${ui.mode === "strand" ? `<label class="note" for="shSub"><b>Subject</b></label><select id="shSub" style="width:auto">${subs.map(s => `<option value="${s.id}" ${s.id === ui.sub ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
       <label class="note" for="shStr"><b>Strand</b></label><select id="shStr" style="width:auto">${sb.strands.map(s => `<option value="${s.id}" ${s.id === ui.strand ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>` : ""}
       ${C.terms.map((x, i) => `<button class="chip" data-term="${i}" aria-pressed="${i === t}">${esc(x)}</button>`).join("")}</div>
       <div class="row" style="margin-bottom:10px">${["All", ...(C.groups || [])].map(g => `<button class="chip" data-grp="${esc(g)}" aria-pressed="${g === ui.group}">${g === "All" ? "All students" : esc(g)}</button>`).join("")}</div>
       <div class="legend"><span><i class="dot" style="width:18px;height:18px"></i>Not assessed</span><span><i class="dot s" style="width:18px;height:18px"></i>Secure</span><span><i class="dot n" style="width:18px;height:18px"></i>Not yet secure</span><span><i class="dot e" style="width:18px;height:18px"></i>Exceeding</span><span>Scores are shaded ${badge("below", "below")} ${badge("inline", "in line")} ${badge("above", "above")}</span></div>`;
     if (!studs.length) { ctx.el.innerHTML = h + `<div class="card"><p class="note">This class has no students yet. The school lead adds them in Classes and students.</p></div>`; return; }
+    if (role() === "checker") ui.mode = "reports";
     if (ui.mode === "overview") return renderOverview(h.replace(/<div class="legend">[\s\S]*$/, ""));
+    if (ui.mode === "reports") return renderReports(h.replace(/<div class="legend">[\s\S]*$/, ""));
     let th = `<thead><tr><th class="namecol"></th><th class="grp" colspan="${bc.length + 1}">Baseline</th><th class="grp" colspan="${n || 1}">${esc(C.terms[t])}</th><th class="grp" colspan="3">Summary</th></tr><tr><th class="namecol">Student</th>`;
     bc.forEach(c => th += `<th class="colh"><b>${esc(c.name)}</b>${hint(c)}</th>`);
     th += `<th class="colh"><b>Baseline level</b>scale</th>`;
@@ -236,8 +335,10 @@
   }
 
   async function onClick(e) {
-    const t = e.target.closest("button"); if (!t || !ctx || !(ctx.el.contains(t) || t.closest("#tnProfile"))) return;
+    const t = e.target.closest("button"); if (!t || !ctx || !(ctx.el.contains(t) || t.closest("#tnProfile") || t.closest("#tnEditor"))) return;
     if (t.dataset.pclose) return t.closest("dialog").close();
+    if (t.dataset.rp) { t.disabled = true; try { await reportAction(t.dataset.rp, t); } finally { t.disabled = false; } return; }
+    if (t.dataset.edit) { const [a, b] = t.dataset.edit.split("|"); return openEditor(a, b); }
     if (t.dataset.pstrand) { ui.pStrand = t.dataset.pstrand; return openProfile(ui.pid); }
     if (t.dataset.sh === "back") return ctx.back();
     if (t.dataset.mode) { ui.mode = t.dataset.mode; return render(); }
@@ -280,9 +381,10 @@
     }
   }
 
+  document.addEventListener("input", e => { if (e.target.id === "edText") count(); });
   window.TNSheet = {
     async open(context) {
-      ctx = context; cls = ctx.cls; pending = 0;
+      ctx = context; cls = ctx.cls; pending = 0; if (ctx.role === "checker") ui.mode = "reports";
       if (!bound) { document.addEventListener("click", onClick); document.addEventListener("change", onChange); bound = true; }
       ctx.el.innerHTML = `<div class="card"><p class="note">Loading ${esc(cls.name)}…</p></div>`;
       try { await load(); render(); } catch (err) { ctx.el.innerHTML = `<div class="card"><div class="msg err">${esc(err.message || err)}</div><p><button class="btn ghost" data-sh="back">← Back</button></p></div>`; }
