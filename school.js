@@ -4,7 +4,7 @@
   const clamp = n => Math.max(0, Math.min(1, n));
   const POS = { below: "Below grade level", inline: "In line", above: "Above grade level", none: "Not yet assessed" };
   const badge = (c, t) => `<span class="badge b-${c}">${t}</span>`;
-  let ctx, C, year, classes = [], studs = [], R = {}, ST = {}, LV = {}, TG = {}, bound = false;
+  let ctx, C, year, classes = [], studs = [], R = {}, ST = {}, LV = {}, TG = {}, CMS = [], LINKS = [], STAFF = [], bound = false;
   let ui = { mode: "subject", term: 0, group: "All", grade: "All" };
 
   async function fetchAll(table, cols) {
@@ -27,6 +27,9 @@
     (await fetchAll("objective_status", "student_id,obj_id,status")).forEach(x => { if (sIds.has(x.student_id)) (ST[x.student_id] = ST[x.student_id] || {})[x.obj_id] = x.status; });
     (await fetchAll("levels", "student_id,strand_id,term,level")).forEach(x => { if (!sIds.has(x.student_id)) return; const a = LV[x.student_id] = LV[x.student_id] || {}; (a[x.strand_id] = a[x.strand_id] || {})[x.term] = x.level; });
     (await fetchAll("taught", "class_id,obj_id")).forEach(x => (TG[x.class_id] = TG[x.class_id] || new Set()).add(x.obj_id));
+    CMS = (await fetchAll("report_comments", "student_id,strand_id,term,status")).filter(x => sIds.has(x.student_id));
+    LINKS = await fetchAll("class_teachers", "class_id,teacher_id,subject_id");
+    STAFF = (await sb.from("profiles").select("id,full_name,email").eq("school_id", sid)).data || [];
   }
 
   const strands = () => { const o = []; C.subjects.forEach(sb => sb.strands.forEach(st => o.push([sb, st]))); return o; };
@@ -96,7 +99,9 @@
       <label class="note" for="svGrade" style="margin-left:8px"><b>Grade</b></label><select id="svGrade" style="width:auto"><option value="All">All grades</option>${grades.map(g => `<option value="${g.id}" ${g.id === ui.grade ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select></div>
       <div class="row" style="margin-bottom:8px">${C.terms.map((x, i) => `<button class="chip" data-sterm="${i}" aria-pressed="${i === t}">${esc(x)}</button>`).join("")}</div>
       <div class="row" style="margin-bottom:14px">${["All", ...(C.groups || [])].map(g => `<button class="chip" data-sgrp="${esc(g)}" aria-pressed="${g === ui.group}">${g === "All" ? "All students" : esc(g)}</button>`).join("")}</div>`;
+    h = h.replace('<button class="pill2" data-smode="strand"', `<button class="pill2" data-smode="reports" aria-pressed="${ui.mode === "reports"}">Report comments</button><button class="pill2" data-smode="strand"`);
     if (!list.length) { ctx.el.innerHTML = h + `<div class="card"><p class="note">No students match these filters yet.</p></div>`; return; }
+    if (ui.mode === "reports") { ctx.el.innerHTML = h + reportsTracker(list); return; }
     if (ui.mode === "subject") {
       const all = strands().map(p => p[1]);
       h += card(`${ui.grade === "All" ? "Whole school" : esc((grades.find(g => g.id === ui.grade) || {}).name)}, all subjects`, list, all, t) + `<div class="grid2" style="margin-top:16px">`;
@@ -121,6 +126,31 @@
     ctx.el.innerHTML = h + `</div>`;
   }
 
+  function reportsTracker(list) {
+    const t = String(ui.term), byKey = {}; CMS.forEach(x => { if (x.term === t) byKey[x.student_id + "|" + x.strand_id] = x.status; });
+    const name = id => { const p = STAFF.find(x => x.id === id); return p ? (p.full_name || p.email) : "Former staff"; };
+    const cls = classes.filter(c => list.some(s => s.class_id === c.id)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    const tot = { approved: 0, ready: 0, changes: 0, draft: 0, none: 0 };
+    let rows = "";
+    cls.forEach(c => {
+      const ss = list.filter(s => s.class_id === c.id), home = LINKS.filter(l => l.class_id === c.id && !l.subject_id).map(l => name(l.teacher_id));
+      rows += `<tr><td style="text-align:left"><b>${esc(c.name)}</b><div class="note">${home.length ? home.map(esc).join(", ") : "No class teacher"}</div></td>`;
+      let ca = 0, cn = 0;
+      C.subjects.forEach(sb => {
+        const k = { approved: 0, ready: 0, changes: 0, draft: 0, none: 0 }; ss.forEach(s => sb.strands.forEach(st => k[byKey[s.id + "|" + st.id] || "none"]++));
+        const n = ss.length * sb.strands.length, pct = n ? Math.round(k.approved / n * 100) : 0; ca += k.approved; cn += n; Object.keys(tot).forEach(x => tot[x] += k[x]);
+        const spec = LINKS.filter(l => l.class_id === c.id && l.subject_id === sb.id).map(l => name(l.teacher_id));
+        rows += `<td><div class="meter" style="margin:0 auto 4px;max-width:120px"><i style="width:${pct}%"></i></div><b>${k.approved}/${n}</b> approved
+          <div class="note" style="font-size:12px">${[k.ready ? `${k.ready} to check` : "", k.changes ? `<span style="color:var(--red)">${k.changes} to fix</span>` : "", k.draft ? `${k.draft} drafts` : "", k.none ? `${k.none} not started` : ""].filter(Boolean).join(" · ")}</div>${spec.length ? `<div class="note" style="font-size:12px">${spec.map(esc).join(", ")}</div>` : ""}</td>`;
+      });
+      rows += `<td>${cn ? badge(ca === cn ? "inline" : ca / cn >= .5 ? "none" : "below", Math.round(ca / cn * 100) + "%") : "–"}</td></tr>`;
+    });
+    const all = Object.values(tot).reduce((a, x) => a + x, 0);
+    return `<div class="card"><h2>Report comments, ${esc(C.terms[ui.term])}</h2><div class="meter"><i style="width:${all ? tot.approved / all * 100 : 0}%"></i></div>
+      <p class="note">${tot.approved} of ${all} approved. ${tot.ready} waiting for a buddy check, ${tot.changes} returned for changes, ${tot.draft} drafts, ${tot.none} not started.</p></div>
+      <div class="sheetwrap" style="margin-top:14px"><table class="sheet"><thead><tr><th style="text-align:left">Class</th>${C.subjects.map(sb => `<th>${esc(sb.name)}</th>`).join("")}<th>Overall</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="note">Each subject counts one comment per strand for every student. Names under a subject are its specialist teachers.</p>`;
+  }
   function onClick(e) { const b = e.target.closest("button"); if (!b || !ctx || !ctx.el.contains(b)) return;
     if (b.dataset.supload) return TNResults.open({ sb: ctx.sb, C, scopeText: "For the whole school. Include a Class column if two students share the same name.", limitClass: null,
       students: studs.map(x => ({ ...x, class_name: (clsOf(x) || {}).name })), existing: (sid, cid, k) => val(sid, cid, k),
