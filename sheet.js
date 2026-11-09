@@ -6,7 +6,7 @@
   const POS = { below: "Below grade level", inline: "In line", above: "Above grade level", none: "Not yet assessed" };
   const PROG = { below: "Below expected", inline: "Expected", above: "Above expected" };
   const badge = (c, t) => `<span class="badge b-${c}">${t}</span>`;
-  let ctx, C, cls, studs = [], R = {}, ST = {}, TAUGHT = new Set(), LV = {}, ui = { sub: null, strand: null, term: 0, group: "All" }, bound = false, pending = 0;
+  let ctx, C, cls, studs = [], R = {}, ST = {}, TAUGHT = new Set(), LV = {}, ui = { sub: null, strand: null, term: 0, group: "All", mode: "overview", pStrand: null, pid: null }, bound = false, pending = 0;
 
   const strands = () => { const o = []; C.subjects.forEach(sb => sb.strands.forEach(st => o.push([sb, st]))); return o; };
   const findStrand = id => strands().find(p => p[1].id === id) || [null, null];
@@ -49,6 +49,105 @@
     const b = level(sid, st, "b"), c = level(sid, st, String(t)); if (b == null || c == null) return null;
     const steps = c - b, exp = C.steps * (t + 1) / C.terms.length;
     return { steps, band: steps < exp - .5 ? "below" : steps > exp + .5 ? "above" : "inline" };
+  }
+
+  function avgEval(sid, list, k) {
+    const ls = list.map(st => [level(sid, st, k), strandEval(sid, st, k)]).filter(x => x[0] != null); if (!ls.length) return null;
+    const lv = Math.round(ls.reduce((a, x) => a + x[0], 0) / ls.length), bs = ls.filter(x => x[1]).map(x => ({ below: -1, inline: 0, above: 1 })[x[1].band]);
+    const b = bs.length ? bs.reduce((a, x) => a + x, 0) / bs.length : 0; return { lv, band: bs.length ? (b < -.33 ? "below" : b > .33 ? "above" : "inline") : "none" };
+  }
+  function avgProgress(sid, list, t) {
+    const ps = list.map(st => progress(sid, st, t)).filter(Boolean); if (!ps.length) return null;
+    const steps = Math.round(ps.reduce((a, p) => a + p.steps, 0) / ps.length * 10) / 10, exp = C.steps * (t + 1) / C.terms.length;
+    return { steps, band: steps < exp - .5 ? "below" : steps > exp + .5 ? "above" : "inline" };
+  }
+  function onTrack(sid, st, t) {
+    const b = level(sid, st, "b"), c = level(sid, st, String(t)); if (b == null || c == null) return null;
+    const max = C.scale.length - 1, target = Math.min(max, b + C.steps), proj = Math.min(max, Math.round(b + (c - b) / (t + 1) * C.terms.length));
+    return { target, proj, ok: proj >= target };
+  }
+  const trackCount = (sid, list, t) => { const r = list.map(st => onTrack(sid, st, t)).filter(Boolean); return { ok: r.filter(x => x.ok).length, n: r.length }; };
+  const allStrands = () => strands().map(p => p[1]);
+  const sname = (sb, st) => sb.name === st.name ? sb.name : `${sb.name}: ${st.name}`;
+  const signed = n => (n > 0 ? "+" : "") + n;
+  function fixFor(c, sid, k) {
+    if (c.type === "score" || c.type === "rubric") return `Go through the ${c.name.toLowerCase()} with the student to find the questions lost, then re-teach those areas in small steps.`;
+    if (c.type === "standardised") return "Use the test report to find the weakest areas and target them in small-group work.";
+    if (c.type === "readingAge") return "Daily guided reading at the right level, plus a home reading log checked weekly.";
+    if (c.type === "list") { const v = val(sid, c.id, k), i = c.options.indexOf(v); return `Targeted group work to move from ${v} towards ${c.options[Math.max(c.below, i + 1)] || c.options[i]}.`; }
+    return "Plan targeted support and review at the next checkpoint.";
+  }
+  function plan(sid, t) {
+    const k = String(t), gaps = [], ahead = [];
+    strands().forEach(([sb, st]) => {
+      const nm = sname(sb, st), ot = onTrack(sid, st, t), pr = progress(sid, st, t), urgent = (pr && pr.band === "below") || (ot && !ot.ok), before = gaps.length;
+      if (ot && !ot.ok) gaps.push({ nm, pri: 0, gap: `Not on track: heading for ${lab(ot.proj)} by the end of the year, target ${lab(ot.target)}.`, fix: "Plan targeted support this term and review progress at the next checkpoint." });
+      st.cols.forEach(c => {
+        if (c.type === "objectives") { for (let ti = 0; ti <= t; ti++) objs(c, ti).forEach(o => { if (!TAUGHT.has(o.id)) return; const v = stat(sid, o.id);
+          if (v === "n") gaps.push({ nm, pri: urgent ? 0 : 1, gap: `Not yet secure: ${o.text}`, fix: o.step || "Re-teach in a small group and check again." });
+          else if (!v) gaps.push({ nm, pri: 2, gap: `Not assessed yet: ${o.text}`, fix: "Assess this objective to complete the picture." }); }); return; }
+        if (c.type === "comment") return;
+        const kk = c.baseline ? "b" : k, e = colEval(sid, c, kk);
+        if (!e) gaps.push({ nm, pri: 2, gap: `Missing: ${c.name}`, fix: "Record this result so the picture is complete." });
+        else if (e.band < 0 && !c.baseline) gaps.push({ nm, pri: urgent ? 0 : 1, gap: `${c.name} is below expectations (${val(sid, c.id, kk)}).`, fix: fixFor(c, sid, kk) });
+      });
+      const e = strandEval(sid, st, k), real = gaps.slice(before).some(g => g.pri < 2);
+      if (e && !real) {
+        if (e.band === "above") ahead.push({ nm, text: "Working above expectations. Offer greater-depth challenges, open-ended problems and chances to explain their thinking." });
+        st.cols.filter(c => c.type === "objectives").forEach(c => objs(c, t + 1).filter(o => !TAUGHT.has(o.id)).slice(0, 2).forEach(o => ahead.push({ nm, text: `Ready for next: ${o.text}. Pre-teach key vocabulary to give a head start.` })));
+        if (e.band === "inline" && t + 1 >= C.terms.length) ahead.push({ nm, text: "Secure this year’s learning and share next steps with next year’s teacher." });
+      }
+    });
+    gaps.sort((a, b) => a.pri - b.pri); return { gaps, ahead };
+  }
+  function chart(sid, st) {
+    const pts = [["Baseline", level(sid, st, "b")], ...C.terms.map((t, i) => [t, i <= ui.term ? level(sid, st, String(i)) : null])], n = C.scale.length;
+    const b = level(sid, st, "b"), target = b == null ? null : Math.min(n - 1, b + C.steps);
+    const X = i => 70 + i * (360 / Math.max(1, pts.length - 1)), Y = v => 180 - v * (150 / Math.max(1, n - 1));
+    let g = `<svg viewBox="0 0 460 215" width="100%" style="max-width:620px;display:block" role="img" aria-label="Levels from baseline across the year">`;
+    for (let v = 0; v < n; v++) g += `<line x1="56" x2="450" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="48" y="${Y(v) + 4}" font-size="11" text-anchor="end" fill="var(--muted)">${esc(C.scale[v]).slice(0, 6)}</text>`;
+    if (target != null) g += `<line x1="56" x2="450" y1="${Y(target)}" y2="${Y(target)}" stroke="var(--plum)" stroke-dasharray="5 4"/><text x="450" y="${Y(target) - 6}" font-size="11" text-anchor="end" fill="var(--plum)">Target ${esc(lab(target))}</text>`;
+    const kn = pts.map((p, i) => [i, p[1]]).filter(p => p[1] != null);
+    g += `<polyline fill="none" stroke="var(--sage)" stroke-width="3" points="${kn.map(([i, v]) => X(i) + "," + Y(v)).join(" ")}"/>`;
+    kn.forEach(([i, v]) => g += `<circle cx="${X(i)}" cy="${Y(v)}" r="6" fill="var(--sage)"/>`);
+    pts.forEach((p, i) => g += `<text x="${X(i)}" y="205" font-size="12" text-anchor="middle" fill="var(--muted)">${esc(p[0])}</text>`);
+    return g + "</svg>";
+  }
+  function renderOverview(head) {
+    const t = ui.term, k = String(t), all = allStrands();
+    let h = `<thead><tr><th class="namecol">Student</th>${C.subjects.map(sb => `<th class="colh"><b>${esc(sb.name)}</b>level and position</th>`).join("")}<th class="colh"><b>Overall</b>all subjects</th><th class="colh"><b>Progress</b>since baseline</th><th class="colh"><b>On track</b>for end-of-year target</th><th class="colh"><b>Gaps</b>to fill</th></tr></thead><tbody>`;
+    visible().forEach(s => {
+      const ov = avgEval(s.id, all, k), pr = avgProgress(s.id, all, t), tr = trackCount(s.id, all, t), gp = plan(s.id, t).gaps.filter(g => g.pri < 2).length;
+      h += `<tr><td class="namecol"><button class="name" data-prof="${s.id}">${esc(s.full_name)}</button><div class="tags">${(s.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></td>`;
+      C.subjects.forEach(sb => { const e = avgEval(s.id, sb.strands, k); h += `<td>${e ? `<b>${esc(lab(e.lv))}</b> ${badge(e.band, POS[e.band])}` : badge("none", "–")}</td>`; });
+      h += `<td>${ov ? `<b>${esc(lab(ov.lv))}</b> ${badge(ov.band, POS[ov.band])}` : "–"}</td><td>${pr ? badge(pr.band, signed(pr.steps) + " · " + PROG[pr.band]) : "–"}</td>
+        <td>${tr.n ? badge(tr.ok === tr.n ? "inline" : tr.ok >= tr.n / 2 ? "none" : "below", `${tr.ok} of ${tr.n}`) : "–"}</td><td>${gp ? badge(gp > 4 ? "below" : "none", gp) : badge("inline", "0")}</td></tr>`;
+    });
+    ctx.el.innerHTML = head + `<div class="sheetwrap"><table class="sheet">${h}</tbody></table></div><p class="note">Levels are the average of each subject’s strands. Tap a name for the full year, gaps and next steps.</p>`;
+  }
+  function openProfile(sid) {
+    ui.pid = sid; const s = studs.find(x => x.id === sid), t = ui.term, k = String(t), all = allStrands();
+    if (!ui.pStrand || !findStrand(ui.pStrand)[1]) ui.pStrand = ui.strand || all[0].id;
+    const [psb, pst] = findStrand(ui.pStrand), ov = avgEval(sid, all, k), pr = avgProgress(sid, all, t), tr = trackCount(sid, all, t), pl = plan(sid, t);
+    const kpi = (l, v) => `<div class="kpi"><span>${l}</span><b>${v}</b></div>`;
+    let yr = ""; C.subjects.forEach(sb => sb.strands.forEach(st => { const ot = onTrack(sid, st, t), p = progress(sid, st, t);
+      yr += `<tr><td style="text-align:left"><b>${esc(sb.name)}</b>${sb.name !== st.name ? ` <span class="note">${esc(st.name)}</span>` : ""}</td><td>${esc(lab(level(sid, st, "b")))}</td>${C.terms.map((x, i) => `<td>${i <= t ? esc(lab(level(sid, st, String(i)))) : "<span class='note'>–</span>"}</td>`).join("")}
+        <td>${ot ? esc(lab(ot.target)) : "–"}</td><td>${p ? badge(p.band, signed(p.steps)) : "–"}</td><td>${ot ? badge(ot.ok ? "inline" : "below", ot.ok ? "On track" : `Heading for ${esc(lab(ot.proj))}`) : "–"}</td></tr>`; }));
+    let data = ""; pst.cols.forEach(c => {
+      if (c.type === "objectives") C.terms.forEach((tn, ti) => objs(c, ti).forEach(o => { if (!TAUGHT.has(o.id)) return; const v = stat(sid, o.id); data += `<li><i class="dot ${v}" style="width:22px;height:22px;font-size:11px;flex:none">${DOT[v]}</i><span>${esc(tn)}: ${esc(o.text)}</span></li>`; }));
+      else { const keys = c.baseline ? [["b", "Baseline"]] : C.terms.map((x, i) => [String(i), x]); const vals = keys.map(([kk, l]) => { const v = val(sid, c.id, kk); return v == null ? "" : `${esc(l)}: <b>${esc(v)}</b>`; }).filter(Boolean);
+        if (vals.length) data = `<li><span><b>${esc(c.name)}</b> ${vals.join(", ")}</span></li>` + data; } });
+    const gapsH = pl.gaps.length ? `<ul class="plan">${pl.gaps.map(g => `<li>${g.pri === 0 ? badge("below", "Priority") : g.pri === 2 ? badge("none", "Check") : ""} <b>${esc(g.nm)}.</b> ${esc(g.gap)}<div class="fix">${esc(g.fix)}</div></li>`).join("")}</ul>` : `<p class="ok">No gaps recorded.</p>`;
+    const aheadH = pl.ahead.length ? `<ul class="plan">${pl.ahead.map(a => `<li><b>${esc(a.nm)}.</b> ${esc(a.text)}</li>`).join("")}</ul>` : `<p class="note">Next steps appear here once a strand has no gaps.</p>`;
+    let d = document.getElementById("tnProfile"); if (!d) { d = document.createElement("dialog"); d.id = "tnProfile"; document.body.appendChild(d); }
+    d.innerHTML = `<div class="dlg"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="margin:0;color:var(--plum);font-family:Poppins,sans-serif">${esc(s.full_name)}</h2><div class="tags">${(s.groups || []).map(x => `<span class="tag">${esc(x)}</span>`).join("")}</div></div><button class="btn ghost small" data-pclose="1">Close</button></div>
+      <div class="card"><h2>Overall, ${esc(C.terms[t])}</h2><div class="kpis">${kpi("Overall level", ov ? esc(lab(ov.lv)) : "–")}${kpi("Against grade level", ov ? badge(ov.band, POS[ov.band]) : "–")}${kpi("Progress since baseline", pr ? badge(pr.band, signed(pr.steps) + " · " + PROG[pr.band]) : "–")}${kpi("On track for targets", tr.n ? `${tr.ok} of ${tr.n} strands` : "–")}</div></div>
+      <div class="card"><h2>The year at a glance</h2><div class="tablewrap"><table class="sheet"><tr><th style="text-align:left">Subject</th><th>Baseline</th>${C.terms.map(x => `<th>${esc(x)}</th>`).join("")}<th>Target</th><th>Progress</th><th>End of year</th></tr>${yr}</table></div>
+        <p class="note">“End of year” projects the student’s current rate of progress to the final term.</p></div>
+      <div class="card"><h2>Progress from baseline</h2><div class="row">${strands().map(([a, b]) => `<button class="chip" data-pstrand="${b.id}" aria-pressed="${b.id === ui.pStrand}">${esc(sname(a, b))}</button>`).join("")}</div>${chart(sid, pst)}</div>
+      <div class="grid2"><div class="card"><h2>Gaps to fill</h2>${gapsH}</div><div class="card"><h2>Next steps to move forward</h2>${aheadH}</div></div>
+      <div class="card"><h2>${esc(sname(psb, pst))}: all recorded data</h2><ul class="plan objl">${data || `<li class="note">Nothing recorded yet.</li>`}</ul></div></div>`;
+    if (!d.open) d.showModal();
   }
 
   async function load() {
@@ -101,12 +200,14 @@
     const bc = st.cols.filter(c => c.baseline), tc = st.cols.filter(c => !c.baseline);
     let n = 0; tc.forEach(c => { n += c.type === "objectives" ? objs(c, t).length : 1; });
     let h = `<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="row"><button class="btn ghost small" data-sh="back">← Back</button><h2 style="margin:0;font-family:Poppins,sans-serif;color:var(--plum)">${esc(cls.name)}</h2><span class="note">${studs.length} students</span></div><span class="note" id="shSave">All changes saved</span></div>
-      <div class="row" style="margin-bottom:10px"><label class="note" for="shSub"><b>Subject</b></label><select id="shSub" style="width:auto">${subs.map(s => `<option value="${s.id}" ${s.id === ui.sub ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
-      <label class="note" for="shStr"><b>Strand</b></label><select id="shStr" style="width:auto">${sb.strands.map(s => `<option value="${s.id}" ${s.id === ui.strand ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
+      <div class="row" style="margin-bottom:10px"><button class="pill2" data-mode="overview" aria-pressed="${ui.mode === "overview"}">Class overview</button><button class="pill2" data-mode="strand" aria-pressed="${ui.mode === "strand"}">Record data by strand</button></div>
+      <div class="row" style="margin-bottom:10px">${ui.mode === "strand" ? `<label class="note" for="shSub"><b>Subject</b></label><select id="shSub" style="width:auto">${subs.map(s => `<option value="${s.id}" ${s.id === ui.sub ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
+      <label class="note" for="shStr"><b>Strand</b></label><select id="shStr" style="width:auto">${sb.strands.map(s => `<option value="${s.id}" ${s.id === ui.strand ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>` : ""}
       ${C.terms.map((x, i) => `<button class="chip" data-term="${i}" aria-pressed="${i === t}">${esc(x)}</button>`).join("")}</div>
       <div class="row" style="margin-bottom:10px">${["All", ...(C.groups || [])].map(g => `<button class="chip" data-grp="${esc(g)}" aria-pressed="${g === ui.group}">${g === "All" ? "All students" : esc(g)}</button>`).join("")}</div>
       <div class="legend"><span><i class="dot" style="width:18px;height:18px"></i>Not assessed</span><span><i class="dot s" style="width:18px;height:18px"></i>Secure</span><span><i class="dot n" style="width:18px;height:18px"></i>Not yet secure</span><span><i class="dot e" style="width:18px;height:18px"></i>Exceeding</span><span>Scores are shaded ${badge("below", "below")} ${badge("inline", "in line")} ${badge("above", "above")}</span></div>`;
     if (!studs.length) { ctx.el.innerHTML = h + `<div class="card"><p class="note">This class has no students yet. The school lead adds them in Classes and students.</p></div>`; return; }
+    if (ui.mode === "overview") return renderOverview(h.replace(/<div class="legend">[\s\S]*$/, ""));
     let th = `<thead><tr><th class="namecol"></th><th class="grp" colspan="${bc.length + 1}">Baseline</th><th class="grp" colspan="${n || 1}">${esc(C.terms[t])}</th><th class="grp" colspan="3">Summary</th></tr><tr><th class="namecol">Student</th>`;
     bc.forEach(c => th += `<th class="colh"><b>${esc(c.name)}</b>${hint(c)}</th>`);
     th += `<th class="colh"><b>Baseline level</b>scale</th>`;
@@ -116,7 +217,7 @@
     if (!n) th += `<th class="note">No columns for this term</th>`;
     th += `<th>Position</th><th class="colh"><b>Teacher level</b>Auto shows the suggestion</th><th>Progress from baseline</th></tr></thead><tbody>`;
     visible().forEach(s => { const sm = summary(s, st);
-      th += `<tr><td class="namecol"><b style="color:var(--plum)">${esc(s.full_name)}</b><div class="tags">${(s.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></td>`;
+      th += `<tr><td class="namecol"><button class="name" data-prof="${s.id}">${esc(s.full_name)}</button><div class="tags">${(s.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></td>`;
       bc.forEach(c => th += `<td>${cell(s, c, "b")}</td>`);
       th += `<td><select class="lv" data-lv="${s.id}|${st.id}|b" aria-label="Baseline level for ${esc(s.full_name)}">${lvOpts(s, st, "b")}</select></td>`;
       tc.forEach(c => { if (c.type === "objectives") objs(c, t).forEach(o => { const tg = TAUGHT.has(o.id), v = stat(s.id, o.id);
@@ -135,8 +236,12 @@
   }
 
   async function onClick(e) {
-    const t = e.target.closest("button"); if (!t || !ctx || !ctx.el.contains(t)) return;
+    const t = e.target.closest("button"); if (!t || !ctx || !(ctx.el.contains(t) || t.closest("#tnProfile"))) return;
+    if (t.dataset.pclose) return t.closest("dialog").close();
+    if (t.dataset.pstrand) { ui.pStrand = t.dataset.pstrand; return openProfile(ui.pid); }
     if (t.dataset.sh === "back") return ctx.back();
+    if (t.dataset.mode) { ui.mode = t.dataset.mode; return render(); }
+    if (t.dataset.prof) { ui.pStrand = null; return openProfile(t.dataset.prof); }
     if (t.dataset.term) { ui.term = +t.dataset.term; return render(); }
     if (t.dataset.grp) { ui.group = t.dataset.grp; return render(); }
     if (t.dataset.cell) {
