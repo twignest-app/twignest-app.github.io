@@ -78,7 +78,7 @@ table.sheet th.colh{white-space:normal;min-width:90px;max-width:130px}table.shee
 .tags{display:flex;gap:4px;margin-top:3px;flex-wrap:wrap}.tag{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--plum-soft);color:var(--plum)}
 .dot{width:30px;height:30px;border-radius:50%;border:2px dashed var(--line);background:transparent;cursor:pointer;display:inline-grid;place-items:center;font-size:13px;font-weight:800;padding:0}
 .dot.s{background:var(--sage);border:2px solid var(--sage);color:#fff}.dot.n{background:var(--amber-soft);border:2px solid var(--amber);color:var(--amber)}.dot.e{background:var(--plum);border:2px solid var(--plum);color:#fff}
-.dot:disabled{cursor:not-allowed;border-style:solid;opacity:.35}
+.dot.p{background:var(--sage-soft);border:2px solid var(--sage);color:var(--sage)}.dot:disabled{cursor:not-allowed;border-style:solid;opacity:.35}
 .in{width:76px;padding:5px 6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg)}select.in{width:auto;max-width:150px;text-align:left}
 .tb{background:var(--red-soft)!important}.ti{background:var(--sage-soft)!important}.ta{background:var(--plum-soft)!important}
 .lv{max-width:170px;width:auto;padding:5px 8px}
@@ -90,6 +90,11 @@ table.sheet th.colh{white-space:normal;min-width:90px;max-width:130px}table.shee
 .classbtn:hover{border-color:var(--plum-2)}
 .statusbtn{border:0;border-radius:999px;padding:5px 12px;font-weight:800;font-size:12.5px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}.statusbtn span{font-weight:600;opacity:.75;font-size:11.5px}
 dialog#tnResults{border:0;border-radius:18px;padding:0;width:min(820px,95vw);max-height:92vh;background:var(--card);color:var(--ink)}dialog#tnResults::backdrop{background:rgba(40,25,60,.45)}
+.sid{display:inline-block;margin-left:6px;font-size:11.5px;font-weight:700;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:0 6px;vertical-align:middle}
+.rcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px;transition:box-shadow .3s}.rcard h3{font-family:Poppins,Nunito,sans-serif;font-weight:600;font-size:16px;color:var(--plum)}
+.rcard.flash{box-shadow:0 0 0 3px var(--plum-2)}.rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 14px;margin:10px 0}.rgrid select{width:100%}
+.rcard label.note{display:block;margin:8px 0 4px}textarea.rtext{min-height:110px;font-size:15px;line-height:1.55}textarea.rstep{min-height:56px;font-size:14px}.rcard input[type=text]{width:100%}
+.rgs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.rg{border:1px solid #ddd;border-radius:6px;padding:4px 6px;font-size:11px;page-break-inside:avoid}.rg b{color:#462D5B}
 #tnPrint{display:none}
 @media print{body>*:not(#tnPrint){display:none!important}#tnPrint{display:block!important;color:#000;font-family:Nunito,Arial,sans-serif}
 .rep{page-break-after:always;padding:6mm 4mm}.rep:last-child{page-break-after:auto}
@@ -97,6 +102,7 @@ body{background:#fff!important}.rep .rh{display:flex;gap:14px;align-items:center
 .rep h1{display:block!important;margin:0;font-size:22px;color:#462D5B;font-family:Poppins,Arial,sans-serif}.rep .rh p{margin:2px 0 0;font-size:12px;color:#555}
 .rep .sum{font-size:13px}.rep table{width:100%;border-collapse:collapse;font-size:12px}.rep th,.rep td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top}
 .rep th{background:#F2ECF7}.rep tr.cm td{font-size:12px;line-height:1.5;background:#fff}.rep h2{font-size:15px;color:#462D5B;margin:14px 0 4px}.rep ul{font-size:12px;margin:0;padding-left:18px}}
+dialog#tnPrintOpt{border:0;border-radius:18px;padding:0;width:min(460px,92vw);background:var(--card);color:var(--ink)}dialog#tnPrintOpt::backdrop{background:rgba(40,25,60,.45)}
 dialog#tnEditor{border:0;border-radius:18px;padding:0;width:min(760px,95vw);max-height:92vh;background:var(--card);color:var(--ink)}dialog#tnEditor::backdrop{background:rgba(40,25,60,.45)}
 .sbar{display:flex;height:16px;border-radius:999px;overflow:hidden;background:var(--bg);margin:6px 0}.sbar i{display:block}
 .meter{height:10px;border-radius:999px;background:var(--bg);overflow:hidden;margin:6px 0}.meter i{display:block;height:100%;background:var(--sage)}

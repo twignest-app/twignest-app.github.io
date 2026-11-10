@@ -40,7 +40,9 @@
       const head = X.rows[X.hi] || [], opt = sel => head.map((hd, i) => `<option value="${i}" ${i === sel ? "selected" : ""}>${esc(hd || "Column " + (i + 1))}</option>`).join("");
       h += `<div class="grid3"><div><label for="rxName"><b>Student names are in</b></label><select id="rxName">${opt(X.nameI)}</select></div>
         <div><label for="rxVal"><b>Results are in</b></label><select id="rxVal">${opt(X.valI)}</select></div>
-        <div><label for="rxCls"><b>Class is in (optional)</b></label><select id="rxCls"><option value="-1">No class column</option>${opt(X.clsI)}</select></div></div>`;
+        <div><label for="rxCls"><b>Class is in (optional)</b></label><select id="rxCls"><option value="-1">No class column</option>${opt(X.clsI)}</select></div>
+        <div><label for="rxId"><b>Student IDs are in (optional)</b></label><select id="rxId"><option value="-1">No ID column</option>${opt(X.idI)}</select></div></div>
+        <p class="note">${X.idI >= 0 ? "Students are matched by their student ID first, then by name." : "Students are matched by name. Add a Student ID column to match exactly."}</p>`;
       const p = preview();
       h += `<div class="grid3" style="margin:12px 0"><div class="colcard" style="margin:0"><b style="font-size:22px;color:var(--plum)">${p.ok.length}</b><div class="note">results ready to save${p.over ? `, ${p.over} replacing existing results` : ""}</div></div>
         <div class="colcard" style="margin:0"><b style="font-size:22px;color:var(--plum)">${p.unmatched.length}</b><div class="note">names not found</div></div>
@@ -56,8 +58,9 @@
   function preview() {
     const c = cols().find(x => x.c.id === X.colId).c, ok = [], unmatched = [], bad = [], ambiguous = [], seen = new Set();
     X.rows.slice(X.hi + 1).forEach(r => {
-      const name = String(r[X.nameI] ?? "").trim(); if (!name) return;
-      let cands = X.students.filter(s => norm(s.full_name) === norm(name));
+      const name = String(r[X.nameI] ?? "").trim(), sid = X.idI >= 0 ? String(r[X.idI] ?? "").trim() : ""; if (!name && !sid) return;
+      let cands = sid ? X.students.filter(s => s.student_number && norm(s.student_number) === norm(sid)) : [];
+      if (!cands.length) cands = X.students.filter(s => norm(s.full_name) === norm(name));
       if (X.clsI >= 0) cands = cands.filter(s => norm(s.class_name) === norm(r[X.clsI]));
       if (!cands.length) { if (X.clsI < 0 || X.limitClass == null || norm(r[X.clsI]) === norm(X.limitClass)) unmatched.push(name); return; }
       if (cands.length > 1) { ambiguous.push(name); return; }
@@ -74,11 +77,14 @@
     const head = (rows[hi] || []).map(x => String(x).toLowerCase());
     const f1 = re => head.findIndex(h => re.test(h));
     X.rows = rows; X.hi = hi; X.file = f.name;
-    X.nameI = Math.max(0, f1(/name|student|pupil/));
+    X.nameI = Math.max(0, f1(/name|pupil/) >= 0 ? f1(/name|pupil/) : f1(/student/));
     X.clsI = f1(/^(class|section|form|homeroom|group)$/);
+    X.idI = f1(/^(student ?id|student ?no\.?|student ?number|school ?(id|number|no\.?)|id|number|emis|esis|sims ?id|admission ?(no\.?|number))$/);
     const pick = cols().find(x => x.c.id === X.colId), want = pick ? norm(pick.c.name) : "";
-    let v = head.findIndex(h => want && norm(h) === want); if (v < 0) v = f1(/score|result|mark|sas|standard|total|age|band|level|percent/);
-    if (v < 0) v = head.findIndex((h, i) => i !== X.nameI && i !== X.clsI && h); X.valI = Math.max(0, v);
+    const used = i => i === X.nameI || i === X.clsI || i === X.idI;
+    let v = head.findIndex((h, i) => !used(i) && want && (norm(h) === want || (norm(h).length > 3 && (want.includes(norm(h)) || norm(h).includes(want)))));
+    if (v < 0) v = head.findIndex((h, i) => !used(i) && /score|result|mark|sas|standard|total|age|band|level|percent/.test(h));
+    if (v < 0) v = head.findIndex((h, i) => !used(i) && h); X.valI = Math.max(0, v);
   }
   async function save() {
     const p = preview(), msg = document.getElementById("rxMsg"), c = cols().find(x => x.c.id === X.colId).c;
@@ -96,6 +102,7 @@
     if (t.id === "rxName") { X.nameI = +t.value; return render(); }
     if (t.id === "rxVal") { X.valI = +t.value; return render(); }
     if (t.id === "rxCls") { X.clsI = +t.value; return render(); }
+    if (t.id === "rxId") { X.idI = +t.value; return render(); }
     if (t.id === "rxFile") { const f = t.files[0]; if (!f) return; try { await readFile(f); render(); } catch (err) { alert(err.message || err); } }
   }
 

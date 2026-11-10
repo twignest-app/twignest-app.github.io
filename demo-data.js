@@ -55,13 +55,13 @@
     school_setups: [{ id: "r1", school_id: "s1", year: "2026–2027", status: "live", config }],
     classes: [{ id: "k1", school_id: "s1", year: "2026–2027", grade_id: "g2", name: "2A" }, { id: "k2", school_id: "s1", year: "2026–2027", grade_id: "g2", name: "2B" }],
     class_teachers: [{ id: "ct1", class_id: "k1", teacher_id: "u2", subject_id: null }, { id: "ct2", class_id: "k2", teacher_id: "u3", subject_id: null }],
-    students: [], results: [], objective_status: [], levels: [], taught: [], report_comments: [] };
+    students: [], results: [], objective_status: [], levels: [], taught: [], report_comments: [], next_steps: [] };
 
   const names = [["Layla Hassan", ["EAL"]], ["Omar Khalid", []], ["Yusuf Rahman", ["SEN"]], ["Mariam Al Shamsi", ["Emirati", "G&T"]], ["Ahmed Al Mansoori", ["Emirati"]], ["Sara Ibrahim", []], ["Hamdan Al Ketbi", ["Emirati"]], ["Aisha Siddiqui", ["EAL"]],
     ["Zayed Al Nuaimi", ["Emirati", "SEN"]], ["Noor Fathi", ["G&T"]], ["Adam Youssef", []], ["Fatima Al Ali", ["Emirati"]], ["Rayan Malik", ["EAL", "SEN"]], ["Hessa Al Suwaidi", ["Emirati"]], ["Ali Hamdan", []], ["Lina Haddad", ["EAL"]],
     ["Khalid Al Zaabi", ["Emirati"]], ["Maya Thomas", []], ["Ibrahim Saleh", ["EAL"]], ["Reem Al Hosani", ["Emirati", "G&T"]], ["Jad Nassar", []], ["Salma Farouk", ["SEN"]], ["Rashid Al Kaabi", ["Emirati"]], ["Hana Yousef", ["EAL"]]];
   const ability = {};
-  names.forEach(([n, g], i) => { const id = "p" + i; db.students.push({ id, school_id: "s1", class_id: i % 2 ? "k2" : "k1", full_name: n, groups: g, archived: false });
+  names.forEach(([n, g], i) => { const id = "p" + i; db.students.push({ id, school_id: "s1", class_id: i % 2 ? "k2" : "k1", full_name: n, student_number: String(20140 + i), groups: g, archived: false });
     ability[id] = g.includes("G&T") ? .88 + rnd() * .1 : g.includes("SEN") ? .28 + rnd() * .2 : .5 + rnd() * .4; });
   const put = (sid, cid, term, v) => db.results.push({ student_id: sid, col_id: cid, term, value: String(v) });
   const clamp = x => Math.max(0, Math.min(1, x));
@@ -82,7 +82,7 @@
   })));
 
   const KEYS = { results: ["student_id", "col_id", "term"], objective_status: ["student_id", "obj_id"], levels: ["student_id", "strand_id", "term"], taught: ["class_id", "obj_id"],
-    report_comments: ["student_id", "strand_id", "term"], school_setups: ["id"], class_teachers: ["id"], classes: ["id"], students: ["id"], profiles: ["id"] };
+    report_comments: ["student_id", "strand_id", "term"], next_steps: ["student_id", "strand_id", "term"], school_setups: ["id"], class_teachers: ["id"], classes: ["id"], students: ["id"], profiles: ["id"] };
   let n = 100;
   function q(t) {
     const f = []; let op = "select", payload = null, single = false, count = false, rng = null;

@@ -3,11 +3,22 @@
   const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const clamp = n => Math.max(0, Math.min(1, n));
   const DOT = { "": "", s: "✓", n: "!", e: "+" }, DOTL = { "": "not assessed", s: "secure", n: "not yet secure", e: "exceeding" };
-  const POS = { below: "Below grade level", inline: "In line", above: "Above grade level", none: "Not yet assessed" };
-  const PROG = { below: "Below expected", inline: "Expected", above: "Above expected" };
+  const POS = { below: "Below curriculum standards", inline: "In line with curriculum standards", above: "Above curriculum standards", none: "Not yet assessed" };
+  const PROG = { below: "Below expected progress", inline: "Expected progress", above: "Better than expected progress" };
+  const POSS = { below: "Below", inline: "In line", above: "Above", none: "Not yet assessed" }, PROGS = { below: "Below expected", inline: "Expected", above: "Better than expected" };
+  function applyLabels(cfg) { const L = (cfg && cfg.labels) || {}; ["below", "inline", "above"].forEach(k => { if (L.att && L.att[k]) POS[k] = L.att[k]; if (L.prog && L.prog[k]) PROG[k] = L.prog[k]; }); }
   const badge = (c, t) => `<span class="badge b-${c}">${t}</span>`;
-  let ctx, C, cls, studs = [], R = {}, ST = {}, TAUGHT = new Set(), LV = {}, CM = {}, ED = null, ui = { sub: null, strand: null, term: 0, group: "All", mode: "overview", pStrand: null, pid: null }, bound = false, pending = 0;
+  let ctx, C, cls, studs = [], R = {}, ST = {}, TAUGHT = new Set(), LV = {}, CM = {}, NS = {}, ED = null, ui = { sub: null, strand: null, term: 0, group: "All", mode: "overview", pStrand: null, pid: null }, bound = false, pending = 0;
 
+  const DEF_OS = [{ code: "s", label: "Secure", short: "✓", kind: "secure" }, { code: "n", label: "Not yet secure", short: "!", kind: "notyet" }, { code: "e", label: "Exceeding", short: "+", kind: "exceed" }];
+  const OS = () => (C && C.objScale && C.objScale.length ? C.objScale : DEF_OS);
+  const osOf = v => OS().find(x => x.code === v) || DEF_OS.find(x => x.code === v) || { code: v, label: v, short: "?", kind: "secure" };
+  const credit = v => ({ notyet: 0, partial: .5, secure: 1, exceed: 1 })[osOf(v).kind] ?? 1;
+  const isEx = v => osOf(v).kind === "exceed", isGap = v => !!v && credit(v) < 1;
+  const dotCls = v => v ? ({ notyet: "n", partial: "p", secure: "s", exceed: "e" })[osOf(v).kind] : "";
+  const dotTxt = v => v ? esc(osOf(v).short) : "";
+  const defCode = () => (OS().find(x => x.kind === "secure") || OS()[0]).code;
+  const cycle = v => { const order = [defCode(), ...OS().map(x => x.code).filter(c => c !== defCode())], i = order.indexOf(v); return v === "" || i < 0 ? order[0] : (order[i + 1] ?? ""); };
   const strands = () => { const o = []; C.subjects.forEach(sb => sb.strands.forEach(st => o.push([sb, st]))); return o; };
   const findStrand = id => strands().find(p => p[1].id === id) || [null, null];
   const findCol = id => { for (const [, st] of strands()) for (const c of st.cols) if (c.id === id) return c; return null; };
@@ -23,7 +34,7 @@
     if (c.type === "objectives") {
       if (k === "b") return null;
       let a = 0, sec = 0, ex = 0;
-      objs(c, +k).filter(o => TAUGHT.has(o.id)).forEach(o => { const v = stat(sid, o.id); if (v) { a++; if (v !== "n") sec++; if (v === "e") ex++; } });
+      objs(c, +k).filter(o => TAUGHT.has(o.id)).forEach(o => { const v = stat(sid, o.id); if (v) { a++; sec += credit(v); if (isEx(v)) ex++; } });
       if (!a) return null; const p = sec / a * 100, e = ex / a * 100;
       return { band: p < c.belowPct ? -1 : (p >= 90 && e >= c.abovePct) ? 1 : 0, norm: clamp(p / 100) };
     }
@@ -84,7 +95,7 @@
       if (ot && !ot.ok) gaps.push({ nm, pri: 0, gap: `Not on track: heading for ${lab(ot.proj)} by the end of the year, target ${lab(ot.target)}.`, fix: "Plan targeted support this term and review progress at the next checkpoint." });
       st.cols.forEach(c => {
         if (c.type === "objectives") { for (let ti = 0; ti <= t; ti++) objs(c, ti).forEach(o => { if (!TAUGHT.has(o.id)) return; const v = stat(sid, o.id);
-          if (v === "n") gaps.push({ nm, pri: urgent ? 0 : 1, gap: `Not yet secure: ${o.text}`, fix: o.step || "Re-teach in a small group and check again." });
+          if (isGap(v)) gaps.push({ nm, pri: urgent ? 0 : 1, gap: `${osOf(v).label}: ${o.text}`, fix: o.step || "Re-teach in a small group and check again." });
           else if (!v) gaps.push({ nm, pri: 2, gap: `Not assessed yet: ${o.text}`, fix: "Assess this objective to complete the picture." }); }); return; }
         if (c.type === "comment") return;
         const kk = c.baseline ? "b" : k, e = colEval(sid, c, kk);
@@ -115,12 +126,12 @@
   }
   function renderOverview(head) {
     const t = ui.term, k = String(t), all = allStrands();
-    let h = `<thead><tr><th class="namecol">Student</th>${C.subjects.map(sb => `<th class="colh"><b>${esc(sb.name)}</b>level and position</th>`).join("")}<th class="colh"><b>Overall</b>all subjects</th><th class="colh"><b>Progress</b>since baseline</th><th class="colh"><b>On track</b>for end-of-year target</th><th class="colh"><b>Gaps</b>to fill</th></tr></thead><tbody>`;
+    let h = `<thead><tr><th class="namecol">Student</th>${C.subjects.map(sb => `<th class="colh"><b>${esc(sb.name)}</b>level, against standards</th>`).join("")}<th class="colh"><b>Overall</b>all subjects</th><th class="colh"><b>Progress</b>since baseline</th><th class="colh"><b>On track</b>for end-of-year target</th><th class="colh"><b>Gaps</b>to fill</th></tr></thead><tbody>`;
     visible().forEach(s => {
       const ov = avgEval(s.id, all, k), pr = avgProgress(s.id, all, t), tr = trackCount(s.id, all, t), gp = plan(s.id, t).gaps.filter(g => g.pri < 2).length;
-      h += `<tr><td class="namecol"><button class="name" data-prof="${s.id}">${esc(s.full_name)}</button><div class="tags">${(s.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></td>`;
-      C.subjects.forEach(sb => { const e = avgEval(s.id, sb.strands, k); h += `<td>${e ? `<b>${esc(lab(e.lv))}</b> ${badge(e.band, POS[e.band])}` : badge("none", "–")}</td>`; });
-      h += `<td>${ov ? `<b>${esc(lab(ov.lv))}</b> ${badge(ov.band, POS[ov.band])}` : "–"}</td><td>${pr ? badge(pr.band, signed(pr.steps) + " · " + PROG[pr.band]) : "–"}</td>
+      h += `<tr><td class="namecol"><button class="name" data-prof="${s.id}">${esc(s.full_name)}</button>${s.student_number ? `<span class="sid">${esc(s.student_number)}</span>` : ""}<div class="tags">${(s.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></td>`;
+      C.subjects.forEach(sb => { const e = avgEval(s.id, sb.strands, k); h += `<td>${e ? `<b>${esc(lab(e.lv))}</b> ${badge(e.band, POSS[e.band])}` : badge("none", "–")}</td>`; });
+      h += `<td>${ov ? `<b>${esc(lab(ov.lv))}</b> ${badge(ov.band, POSS[ov.band])}` : "–"}</td><td>${pr ? badge(pr.band, signed(pr.steps) + " · " + PROGS[pr.band]) : "–"}</td>
         <td>${tr.n ? badge(tr.ok === tr.n ? "inline" : tr.ok >= tr.n / 2 ? "none" : "below", `${tr.ok} of ${tr.n}`) : "–"}</td><td>${gp ? badge(gp > 4 ? "below" : "none", gp) : badge("inline", "0")}</td></tr>`;
     });
     const vs = visible(); let okN = 0, known = 0, progN = 0, pk = 0, need = 0;
@@ -128,7 +139,7 @@
       if (ov && ov.band !== "none") { known++; if (ov.band !== "below") okN++; } if (pr) { pk++; if (pr.band !== "below") progN++; }
       if ((ov && ov.band === "below") || (tr.n && tr.ok < tr.n / 2)) need++; });
     const m = (l, v, sub) => `<div class="metric"><span>${l}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
-    ctx.el.innerHTML = head + `<div class="metrics">${m("In line or above", known ? `${okN} of ${known}` : "–", "against grade level")}${m("Expected progress", pk ? Math.round(progN / pk * 100) + "%" : "–", "or better since baseline")}${m("Need support", need, "below or not on track")}</div>
+    ctx.el.innerHTML = head + `<div class="metrics">${m("In line or above", known ? `${okN} of ${known}` : "–", "against curriculum standards")}${m("Expected progress", pk ? Math.round(progN / pk * 100) + "%" : "–", "or better since baseline")}${m("Need support", need, "below or not on track")}</div>
       <div class="sheetwrap"><table class="sheet">${h}</tbody></table></div><p class="note">Levels are the average of each subject’s strands. Tap a name for the full year, gaps and next steps.</p>`;
   }
   function openProfile(sid) {
@@ -140,18 +151,20 @@
       yr += `<tr><td style="text-align:left"><b>${esc(sb.name)}</b>${sb.name !== st.name ? ` <span class="note">${esc(st.name)}</span>` : ""}</td><td>${esc(lab(level(sid, st, "b")))}</td>${C.terms.map((x, i) => `<td>${i <= t ? esc(lab(level(sid, st, String(i)))) : "<span class='note'>–</span>"}</td>`).join("")}
         <td>${ot ? esc(lab(ot.target)) : "–"}</td><td>${p ? badge(p.band, signed(p.steps)) : "–"}</td><td>${ot ? badge(ot.ok ? "inline" : "below", ot.ok ? "On track" : `Heading for ${esc(lab(ot.proj))}`) : "–"}</td></tr>`; }));
     let data = ""; pst.cols.forEach(c => {
-      if (c.type === "objectives") C.terms.forEach((tn, ti) => objs(c, ti).forEach(o => { if (!TAUGHT.has(o.id)) return; const v = stat(sid, o.id); data += `<li><i class="dot ${v}" style="width:22px;height:22px;font-size:11px;flex:none">${DOT[v]}</i><span>${esc(tn)}: ${esc(o.text)}</span></li>`; }));
+      if (c.type === "objectives") C.terms.forEach((tn, ti) => objs(c, ti).forEach(o => { if (!TAUGHT.has(o.id)) return; const v = stat(sid, o.id); data += `<li><i class="dot ${dotCls(v)}" style="width:22px;height:22px;font-size:11px;flex:none" title="${esc(v ? osOf(v).label : "Not assessed")}">${dotTxt(v)}</i><span>${esc(tn)}: ${esc(o.text)}</span></li>`; }));
       else { const keys = c.baseline ? [["b", "Baseline"]] : C.terms.map((x, i) => [String(i), x]); const vals = keys.map(([kk, l]) => { const v = val(sid, c.id, kk); return v == null ? "" : `${esc(l)}: <b>${esc(v)}</b>`; }).filter(Boolean);
         if (vals.length) data = `<li><span><b>${esc(c.name)}</b> ${vals.join(", ")}</span></li>` + data; } });
     const gapsH = pl.gaps.length ? `<ul class="plan">${pl.gaps.map(g => `<li>${g.pri === 0 ? badge("below", "Priority") : g.pri === 2 ? badge("none", "Check") : ""} <b>${esc(g.nm)}.</b> ${esc(g.gap)}<div class="fix">${esc(g.fix)}</div></li>`).join("")}</ul>` : `<p class="ok">No gaps recorded.</p>`;
     const aheadH = pl.ahead.length ? `<ul class="plan">${pl.ahead.map(a => `<li><b>${esc(a.nm)}.</b> ${esc(a.text)}</li>`).join("")}</ul>` : `<p class="note">Next steps appear here once a strand has no gaps.</p>`;
     let d = document.getElementById("tnProfile"); if (!d) { d = document.createElement("dialog"); d.id = "tnProfile"; document.body.appendChild(d); }
-    d.innerHTML = `<div class="dlg"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="margin:0;color:var(--plum);font-family:Poppins,sans-serif">${esc(s.full_name)}</h2><div class="tags">${(s.groups || []).map(x => `<span class="tag">${esc(x)}</span>`).join("")}</div></div><div class="row"><button class="btn small" data-print="${sid}">Print report</button><button class="btn ghost small" data-pclose="1">Close</button></div></div>
-      <div class="card"><h2>Overall, ${esc(C.terms[t])}</h2><div class="kpis">${kpi("Overall level", ov ? esc(lab(ov.lv)) : "–")}${kpi("Against grade level", ov ? badge(ov.band, POS[ov.band]) : "–")}${kpi("Progress since baseline", pr ? badge(pr.band, signed(pr.steps) + " · " + PROG[pr.band]) : "–")}${kpi("On track for targets", tr.n ? `${tr.ok} of ${tr.n} strands` : "–")}</div></div>
+    d.innerHTML = `<div class="dlg"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="margin:0;color:var(--plum);font-family:Poppins,sans-serif">${esc(s.full_name)}${s.student_number ? ` <span class="sid">${esc(s.student_number)}</span>` : ""}</h2><div class="tags">${(s.groups || []).map(x => `<span class="tag">${esc(x)}</span>`).join("")}</div></div><div class="row"><button class="btn small" data-print="${sid}">Print report</button><button class="btn ghost small" data-pclose="1">Close</button></div></div>
+      <div class="card"><h2>Overall, ${esc(C.terms[t])}</h2><div class="kpis">${kpi("Overall level", ov ? esc(lab(ov.lv)) : "–")}${kpi("Against curriculum standards", ov ? badge(ov.band, POS[ov.band]) : "–")}${kpi("Progress since baseline", pr ? badge(pr.band, signed(pr.steps) + " · " + PROG[pr.band]) : "–")}${kpi("On track for targets", tr.n ? `${tr.ok} of ${tr.n} strands` : "–")}</div></div>
       <div class="card"><h2>The year at a glance</h2><div class="tablewrap"><table class="sheet"><tr><th style="text-align:left">Subject</th><th>Baseline</th>${C.terms.map(x => `<th>${esc(x)}</th>`).join("")}<th>Target</th><th>Progress</th><th>End of year</th></tr>${yr}</table></div>
         <p class="note">“End of year” projects the student’s current rate of progress to the final term.</p></div>
       <div class="card"><h2>Progress from baseline</h2><div class="row">${strands().map(([a, b]) => `<button class="chip" data-pstrand="${b.id}" aria-pressed="${b.id === ui.pStrand}">${esc(sname(a, b))}</button>`).join("")}</div>${chart(sid, pst)}</div>
-      <div class="grid2"><div class="card"><h2>Gaps to fill</h2>${gapsH}</div><div class="card"><h2>Next steps to move forward</h2>${aheadH}</div></div>
+      <div class="grid2"><div class="card"><h2>Gaps to fill</h2>${gapsH}</div><div class="card"><h2>Ideas to move forward</h2>${aheadH}</div></div>
+      <div class="card"><h2>Next steps for ${esc(C.terms[t])}</h2><p class="note">Suggested from the gaps above. Edit them in your own words: they’re saved for this student and used in the report comment and printed report.</p>
+        ${strands().map(([a, b]) => `<label class="note" for="pn-${sid}-${b.id}" style="display:block;margin-top:10px"><b>${esc(sname(a, b))}</b>${nsSaved(String(t), sid, b.id) ? " · edited by teacher" : ""}</label><textarea id="pn-${sid}-${b.id}" class="rstep" data-pns="${sid}|${b.id}">${esc(nsFor(sid, b, t))}</textarea>`).join("")}</div>
       <div class="card"><h2>${esc(sname(psb, pst))}: all recorded data</h2><ul class="plan objl">${data || `<li class="note">Nothing recorded yet.</li>`}</ul></div></div>`;
     if (!d.open) d.showModal();
   }
@@ -173,102 +186,131 @@
     let base = fill(row[band] || row[1] || ""); const pre = ["", "This term, ", "Throughout the term, ", "Over recent weeks, "][(si + ti) % 4];
     if (pre && base.startsWith(nm)) base = pre + base;
     const sec = [], gaps = [];
-    st.cols.filter(c => c.type === "objectives").forEach(c => { for (let i = 0; i <= t; i++) objs(c, i).forEach(o => { const v = stat(sid, o.id); if (v === "e") sec.unshift(o); else if (v === "s") sec.push(o); else if (v === "n") gaps.push(o); }); });
+    st.cols.filter(c => c.type === "objectives").forEach(c => { for (let i = 0; i <= t; i++) objs(c, i).forEach(o => { const v = stat(sid, o.id); if (!v) return; if (isEx(v)) sec.unshift(o); else if (credit(v) >= 1) sec.push(o); else gaps.push(o); }); });
     const lc = x => x.charAt(0).toLowerCase() + x.slice(1).replace(/^know /i, "understand ");
     let str = ""; if (sec.length) { const o = sec[si % Math.min(2, sec.length)];
       str = [` A particular strength is that ${nm} can ${lc(o.text)}.`, ` ${nm} can now ${lc(o.text)} with confidence.`, ` ${nm} has shown that they can ${lc(o.text)}.`][(si + ti) % 3]; }
     const e = strandEval(sid, st, k); let nx;
-    if (gaps.length) nx = ` Next step: ${gaps[0].step || "further practice to " + lc(gaps[0].text) + "."}`;
-    else { const low = st.cols.filter(c => !c.baseline && c.type !== "objectives").map(c => [c, colEval(sid, c, k)]).find(([, x]) => x && x.band < 0);
+    const savedNs = nsSaved(String(t), sid, st.id);
+    if (savedNs) nx = ` Next step: ${savedNs.trim().replace(/[^.!?]$/, m => m + ".")}`;
+    else if (gaps.length) nx = ` Next step: ${gaps[0].step || "further practice to " + lc(gaps[0].text) + "."}`;
+    if (!nx) { const low = st.cols.filter(c => !c.baseline && c.type !== "objectives").map(c => [c, colEval(sid, c, k)]).find(([, x]) => x && x.band < 0);
       nx = low ? ` Next step: ${fixFor(low[0], sid, k)}` : e && e.band === "above" ? " Next step: take on greater-depth challenges that stretch thinking further." : " Next step: continue to apply and consolidate this learning in new contexts."; }
     let text = base + str + nx; const lim = (C.reports || {}).limit || 600; if (text.length > lim) text = base + nx;
     return { text: text.trim(), lv, band };
+  }
+  const nsSaved = (t, sid, stid) => ((NS[t] || {})[sid] || {})[stid];
+  function nsAuto(sid, st, t) {
+    const pl = plan(sid, t), nm = sname(...findStrand(st.id)), mine = pl.gaps.filter(g => g.nm === nm && g.pri < 2).map(g => g.fix);
+    const GEN = "Plan targeted support this term and review progress at the next checkpoint.", spec = [...new Set(mine)].filter(x => x !== GEN), uniq = spec.length ? spec.slice(0, 2) : [...new Set(mine)].slice(0, 1); if (uniq.length) return uniq.join(" ");
+    const a = pl.ahead.filter(x => x.nm === nm).map(x => x.text); return a[0] || "Continue to apply and consolidate this learning in new contexts.";
+  }
+  const nsFor = (sid, st, t) => nsSaved(String(t), sid, st.id) || nsAuto(sid, st, t);
+  function progFinal(sid, st, t) { const c = cmt(String(t), sid, st.id), p = progress(sid, st, t);
+    if (c && c.progress) return { band: c.progress, steps: p ? p.steps : null, over: true }; return p; }
+  function card(sid, st, title) {
+    const t = ui.term, k = String(t), chk = role() === "checker", s = studs.find(x => x.id === sid), c = cmt(k, sid, st.id) || { status: "none" };
+    const e = strandEval(sid, st, k), tl = tLv(sid, st.id, k), p = progress(sid, st, t), lim = (C.reports || {}).limit || 600;
+    const text = c.text || draft(sid, st, t).text, locked = !chk && (c.status === "ready" || c.status === "approved"), [scl, sl] = STATUS[c.status || "none"];
+    const key = `${sid}|${st.id}`, over = tl !== undefined && tl !== null;
+    return `<div class="rcard" id="rc-${sid}-${st.id}"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${title}</h3><div class="row">${over || c.progress ? badge("above", "Teacher judgement") : ""}${badge(scl, sl)}</div></div>
+      ${c.note ? `<div class="msg info" style="margin-top:8px">Checker’s note: ${esc(c.note)}</div>` : ""}
+      <div class="rgrid"><div><label class="note" for="rl-${key}"><b>Attainment this term</b></label><select id="rl-${key}" data-rlv="${key}" ${locked || chk ? "disabled" : ""}><option value="">From the data: ${e ? esc(lab(e.sug)) + " (" + e.pct + "%)" : "–"}</option>${C.scale.map((x, i) => `<option value="${i}" ${tl === i ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div>
+        <div><label class="note" for="rp-${key}"><b>Progress this term</b></label><select id="rp-${key}" data-rpg="${key}" ${locked || chk ? "disabled" : ""}><option value="">From the data: ${p ? PROG[p.band] : "–"}</option>${Object.entries(PROG).map(([v, l]) => `<option value="${v}" ${c.progress === v ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
+      <label class="note" for="rt-${key}"><b>Report comment</b>${c.text ? "" : " (drafted from the data, not saved yet)"}</label>
+      <textarea id="rt-${key}" data-rtx="${key}" class="rtext" ${locked ? "readonly" : ""}>${esc(text)}</textarea>
+      <div class="row" style="justify-content:space-between"><span class="note">${chk ? "" : locked ? (c.status === "approved" ? "Approved by the buddy checker." : "Waiting for the buddy checker.") : "Edit freely. Changes save when you click away."}</span><span class="note rcount" id="rn-${key}">${text.length} / ${lim}</span></div>
+      <label class="note" for="rs-${key}"><b>Next step</b> (used in the report)</label>
+      <textarea id="rs-${key}" data-rns="${key}" class="rstep" ${locked ? "readonly" : ""}>${esc(nsFor(sid, st, t))}</textarea>
+      ${chk ? `<label class="note" for="rk-${key}"><b>Note for the teacher</b></label><input type="text" id="rk-${key}" data-rnote="${key}" value="${esc(c.note || "")}">` : ""}
+      <div class="row" style="margin-top:10px">${chk ? `<button class="btn ghost small" data-rc="return" data-k="${key}" ${c.status === "ready" ? "" : "disabled"}>Return with note</button><button class="btn small" data-rc="approve" data-k="${key}" ${["ready", "changes"].includes(c.status) ? "" : "disabled"}>Approve</button>`
+        : locked ? `<button class="btn ghost small" data-rc="recall" data-k="${key}">${c.status === "approved" ? "Reopen" : "Take back to edit"}</button>`
+        : `<button class="btn ghost small" data-rc="redraft" data-k="${key}">Redraft from the data</button><button class="btn small" data-rc="send" data-k="${key}" ${text.length > lim || !text.trim() ? "disabled" : ""}>Send for checking</button>`}</div></div>`;
   }
   function renderReports(head) {
     const t = String(ui.term), list = strands(), vs = visible(); let tot = 0; const cnt = { none: 0, draft: 0, ready: 0, changes: 0, approved: 0 };
     vs.forEach(s => list.forEach(([, st]) => { tot++; const c = cmt(t, s.id, st.id); cnt[c ? c.status : "none"]++; }));
     const pct = tot ? Math.round(cnt.approved / tot * 100) : 0, chk = role() === "checker";
+    if (!ui.rview) ui.rview = "subject"; if (!list.find(p => p[1].id === ui.rstrand)) ui.rstrand = list[0] && list[0][1].id; if (!vs.find(x => x.id === ui.rstud)) ui.rstud = vs[0] && vs[0].id;
     let h = head + `<div class="card"><h2>Report comments, ${esc(C.terms[ui.term])}</h2><div class="meter"><i style="width:${pct}%"></i></div>
       <p class="note">${cnt.approved} of ${tot} approved. ${cnt.ready} ready to check, ${cnt.changes} need changes, ${cnt.draft} drafts, ${cnt.none} not started.</p>
       <div class="row">${chk ? `<button class="btn" data-rp="next">Check the next comment</button>` : `<button class="btn" data-rp="draftall">Draft all empty comments from the data</button>`}<button class="btn ghost" data-rp="export">Export approved comments (Excel)</button><button class="btn ghost" data-rp="printall">Print all reports</button></div>
-      <p class="note">Drafts use each student’s level, a Low, Middle or High comment from the school’s bank, a strength and a next step from their data. Always read and edit before sending for checking.</p></div>`;
-    let tb = `<thead><tr><th class="namecol">Student</th>${list.map(([a, b]) => `<th class="colh"><b>${esc(sname(a, b))}</b></th>`).join("")}</tr></thead><tbody>`;
-    vs.forEach(s => { tb += `<tr><td class="namecol"><b style="color:var(--plum)">${esc(s.full_name)}</b></td>`;
-      list.forEach(([a, b]) => { const c = cmt(t, s.id, b.id), [cl, l] = STATUS[c ? c.status : "none"];
-        tb += `<td><button class="statusbtn b-${cl}" data-edit="${s.id}|${b.id}">${l}${c && c.text ? `<span>${c.text.length}</span>` : ""}</button></td>`; }); tb += `</tr>`; });
-    ctx.el.innerHTML = h + `<div class="sheetwrap"><table class="sheet">${tb}</tbody></table></div><div id="rpMsg"></div>`;
-  }
-  function openEditor(sid, stid) {
-    const t = String(ui.term), s = studs.find(x => x.id === sid), [sb, st] = findStrand(stid), chk = role() === "checker";
-    let c = cmt(t, sid, stid); c = c ? { ...c } : { status: "none", note: "" };
-    if (!c.text) { const d = draft(sid, st, ui.term); Object.assign(c, { text: d.text, level: d.lv, band: d.band, auto: true }); }
-    const order = []; visible().forEach(x => strands().forEach(([, b]) => order.push(x.id + "|" + b.id))); const pos = order.indexOf(sid + "|" + stid);
-    ED = { sid, stid, c, order, pos }; const lim = (C.reports || {}).limit || 600, locked = !chk && (c.status === "ready" || c.status === "approved"), lab2 = STATUS[c.status || "none"];
-    let d = document.getElementById("tnEditor"); if (!d) { d = document.createElement("dialog"); d.id = "tnEditor"; document.body.appendChild(d); }
-    d.innerHTML = `<div class="dlg"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="margin:0;color:var(--plum);font-family:Poppins,sans-serif">${esc(s.full_name)}</h2><p class="note" style="margin:2px 0 0">${esc(sname(sb, st))}, ${esc(C.terms[ui.term])} ${badge(lab2[0], lab2[1])}</p></div><button class="btn ghost small" data-pclose="1">Close</button></div>
-      ${c.note ? `<div class="msg info">Checker’s note: ${esc(c.note)}</div>` : ""}
-      <div class="row" style="margin:12px 0"><label class="note" for="edLv"><b>Level</b></label><select id="edLv" style="width:auto" ${locked || chk ? "disabled" : ""}>${C.scale.map((x, i) => `<option value="${i}" ${i === c.level ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>
-        <label class="note" for="edBand"><b>Comment</b></label><select id="edBand" style="width:auto" ${locked || chk ? "disabled" : ""}>${BANDS.map((x, i) => `<option value="${i}" ${i === c.band ? "selected" : ""}>${x}</option>`).join("")}</select>
-        ${!chk && !locked ? `<button class="btn ghost small" data-rp="redraft">Redraft from data</button><button class="btn ghost small" data-rp="own">Write my own</button>` : ""}</div>
-      <textarea id="edText" style="min-height:150px;font-size:15px;line-height:1.6" ${locked ? "readonly" : ""}>${esc(c.text || "")}</textarea>
-      <div class="row" style="justify-content:space-between"><span class="note">${c.auto ? "Drafted from the data. Read and edit before sending." : ""}</span><span id="edCount" class="note"></span></div>
-      ${chk ? `<label for="edNote" class="note" style="display:block;margin-top:10px"><b>Note for the teacher</b></label><textarea id="edNote" style="min-height:60px">${esc(c.note || "")}</textarea>` : ""}
-      <div class="row" style="margin-top:14px">${chk ? `<button class="btn ghost" data-rp="return" ${c.status === "ready" ? "" : "disabled"}>Return with note</button><button class="btn" data-rp="approve" ${["ready", "changes"].includes(c.status) ? "" : "disabled"}>Approve</button>`
-        : locked ? `<span class="note">${c.status === "approved" ? "Approved by the buddy checker." : "Waiting for the buddy checker."}</span><button class="btn ghost small" data-rp="recall">${c.status === "approved" ? "Reopen" : "Take back to edit"}</button>`
-        : `<button class="btn ghost" data-rp="save">Save draft</button><button class="btn" id="edReady" data-rp="send">Send for checking</button>`}
-        <span style="margin-left:auto" class="row"><button class="btn ghost small" data-rp="prev" ${pos <= 0 ? "disabled" : ""}>Previous</button><button class="btn ghost small" data-rp="next1" ${pos >= order.length - 1 ? "disabled" : ""}>Next</button></span></div></div>`;
-    if (!d.open) d.showModal(); count();
-  }
-  function count() { const ta = document.getElementById("edText"), el = document.getElementById("edCount"); if (!ta || !el) return; const n = ta.value.trim().length, lim = (C.reports || {}).limit || 600;
-    el.textContent = `${n} / ${lim}`; el.style.color = n > lim ? "var(--red)" : "var(--muted)"; el.style.fontWeight = n > lim ? "800" : "400"; const b = document.getElementById("edReady"); if (b) b.disabled = !n || n > lim; }
-  async function saveEd(status) {
-    const c = ED.c, ta = document.getElementById("edText"), nt = document.getElementById("edNote"), lv = document.getElementById("edLv"), bd = document.getElementById("edBand");
-    if (ta) c.text = ta.value.trim(); if (nt) c.note = nt.value.trim(); if (lv) c.level = +lv.value; if (bd) c.band = +bd.value;
-    c.status = status || (c.status && c.status !== "none" ? c.status : "draft"); if (status === "approved") c.note = "";
-    const row = { student_id: ED.sid, strand_id: ED.stid, term: String(ui.term), text: c.text || "", level: c.level ?? null, band: c.band ?? 1, status: c.status, note: c.note || "" };
-    const t = String(ui.term); (((CM[t] = CM[t] || {})[ED.sid] = (CM[t] || {})[ED.sid] || {}))[ED.stid] = row;
-    return run(ctx.sb.from("report_comments").upsert(row));
+      <p class="note">Attainment and progress come straight from each student’s data for this term. Change them only if your professional judgement differs, and TwigNest marks them as teacher judgement.</p></div>
+      <div class="tabs2" role="tablist" style="margin-top:6px"><button role="tab" data-rv="subject" aria-selected="${ui.rview === "subject"}">By subject</button><button role="tab" data-rv="student" aria-selected="${ui.rview === "student"}">By student</button><button role="tab" data-rv="status" aria-selected="${ui.rview === "status"}">Status overview</button></div>`;
+    if (!vs.length) { ctx.el.innerHTML = h + `<div class="card"><p class="note">No students match these filters.</p></div>`; return; }
+    if (ui.rview === "subject") {
+      const [sb, st] = findStrand(ui.rstrand);
+      h += `<div class="fbar"><label class="fl" for="rvStrand">Subject</label><select id="rvStrand" class="fsel">${list.map(([a, b]) => `<option value="${b.id}" ${b.id === ui.rstrand ? "selected" : ""}>${esc(sname(a, b))}</option>`).join("")}</select>
+        <span class="note">${vs.length} students. When you finish, choose the next subject.</span></div>`;
+      h += vs.map(x => card(x.id, st, `${esc(x.full_name)}${x.student_number ? ` <span class="sid">${esc(x.student_number)}</span>` : ""}`)).join("");
+    } else if (ui.rview === "student") {
+      const i = vs.findIndex(x => x.id === ui.rstud), x = vs[i];
+      h += `<div class="fbar"><button class="btn ghost small" data-rstep="-1" ${i <= 0 ? "disabled" : ""}>← Previous</button><label class="fl" for="rvStud">Student</label><select id="rvStud" class="fsel">${vs.map(y => `<option value="${y.id}" ${y.id === ui.rstud ? "selected" : ""}>${esc(y.full_name)}</option>`).join("")}</select><button class="btn ghost small" data-rstep="1" ${i >= vs.length - 1 ? "disabled" : ""}>Next →</button><button class="btn ghost small" data-print="${x.id}">Print this report</button></div>`;
+      h += `<div class="card" style="margin-bottom:12px"><h2 style="margin:0">${esc(x.full_name)} ${x.student_number ? `<span class="sid">${esc(x.student_number)}</span>` : ""}</h2><div class="tags">${(x.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></div>`;
+      h += list.map(([a, b]) => card(x.id, b, esc(sname(a, b)))).join("");
+    } else {
+      let tb = `<thead><tr><th class="namecol">Student</th>${list.map(([a, b]) => `<th class="colh"><b>${esc(sname(a, b))}</b></th>`).join("")}</tr></thead><tbody>`;
+      vs.forEach(x => { tb += `<tr><td class="namecol"><button class="name" data-rgo="student|${x.id}">${esc(x.full_name)}</button></td>`;
+        list.forEach(([a, b]) => { const c = cmt(t, x.id, b.id), [cl, l] = STATUS[c ? c.status : "none"];
+          tb += `<td><button class="statusbtn b-${cl}" data-rgo="subject|${b.id}|${x.id}">${l}${c && c.text ? `<span>${c.text.length}</span>` : ""}</button></td>`; }); tb += `</tr>`; });
+      h += `<div class="sheetwrap"><table class="sheet">${tb}</tbody></table></div><p class="note">Tap a status to open that comment, or a name to see all of that student’s comments.</p>`;
+    }
+    ctx.el.innerHTML = h;
   }
   function exportCSV() {
     const t = String(ui.term), list = strands(), q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    let csv = "\ufeff" + [q("Student"), ...list.map(([a, b]) => q(sname(a, b) + " level") + "," + q(sname(a, b) + " comment"))].join(",") + "\n";
-    studs.forEach(s => { csv += [q(s.full_name), ...list.map(([, b]) => { const c = cmt(t, s.id, b.id); return c && c.status === "approved" ? q(lab(c.level)) + "," + q(c.text) : q("") + "," + q(""); })].join(",") + "\n"; });
+    let csv = "\ufeff" + [q("Student"), q("Student ID"), ...list.map(([a, b]) => q(sname(a, b) + " level") + "," + q(sname(a, b) + " progress") + "," + q(sname(a, b) + " comment") + "," + q(sname(a, b) + " next step"))].join(",") + "\n";
+    studs.forEach(s => { csv += [q(s.full_name), q(s.student_number || ""), ...list.map(([, b]) => { const c = cmt(t, s.id, b.id), pf = progFinal(s.id, b, ui.term);
+      return c && c.status === "approved" ? [q(lab(level(s.id, b, t))), q(pf ? PROG[pf.band] : ""), q(c.text), q(nsFor(s.id, b, ui.term))].join(",") : [q(""), q(""), q(""), q("")].join(","); })].join(",") + "\n"; });
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = `${cls.name} report comments ${C.terms[ui.term]}.csv`; a.click();
   }
-  async function reportAction(a, t) {
+  function upC(sid, stid, patch) {
+    const t = String(ui.term), prev = cmt(t, sid, stid) || { student_id: sid, strand_id: stid, term: t, text: "", level: null, band: 1, status: "draft", note: "", progress: null };
+    const row = Object.assign({}, prev, patch, { student_id: sid, strand_id: stid, term: t }); if (!row.status || row.status === "none") row.status = "draft";
+    delete row.updated_at; delete row.updated_by;
+    (((CM[t] = CM[t] || {})[sid] = (CM[t] || {})[sid] || {}))[stid] = row;
+    return run(ctx.sb.from("report_comments").upsert(row));
+  }
+  async function reportAction(a) {
     if (a === "export") return exportCSV();
     if (a === "printall") return printReports(visible());
-    if (a === "draftall") { const rows = []; visible().forEach(s => strands().forEach(([, st]) => { const c = cmt(String(ui.term), s.id, st.id); if (!c || !c.text) { const d = draft(s.id, st, ui.term); if (d.text) rows.push({ student_id: s.id, strand_id: st.id, term: String(ui.term), text: d.text, level: d.lv, band: d.band, status: "draft", note: "" }); } }));
+    if (a === "draftall") { const rows = []; visible().forEach(s => strands().forEach(([, st]) => { const c = cmt(String(ui.term), s.id, st.id); if (!c || !c.text) { const d = draft(s.id, st, ui.term); if (d.text) rows.push({ student_id: s.id, strand_id: st.id, term: String(ui.term), text: d.text, level: d.lv, band: d.band, status: "draft", note: "", progress: c ? c.progress || null : null }); } }));
       rows.forEach(r => (((CM[r.term] = CM[r.term] || {})[r.student_id] = (CM[r.term] || {})[r.student_id] || {}))[r.strand_id] = r); render(); if (rows.length) run(ctx.sb.from("report_comments").upsert(rows)); return; }
-    if (a === "next") { for (const s of visible()) for (const [, st] of strands()) { const c = cmt(String(ui.term), s.id, st.id); if (c && c.status === "ready") return openEditor(s.id, st.id); } return alert("There are no comments waiting to be checked."); }
-    if (!ED) return; const dlg = document.getElementById("tnEditor");
-    if (a === "redraft") { const d = draft(ED.sid, findStrand(ED.stid)[1], ui.term, +document.getElementById("edLv").value, +document.getElementById("edBand").value); document.getElementById("edText").value = d.text; return count(); }
-    if (a === "own") { const ta = document.getElementById("edText"); ta.value = ""; ta.focus(); return count(); }
-    if (a === "save") { await saveEd(); dlg.close(); return render(); }
-    if (a === "send") { await saveEd("ready"); dlg.close(); return render(); }
-    if (a === "recall") { await saveEd("draft"); return openEditor(ED.sid, ED.stid); }
-    if (a === "return") { if (!document.getElementById("edNote").value.trim()) return alert("Add a note so the teacher knows what to change."); await saveEd("changes"); dlg.close(); return render(); }
-    if (a === "approve") { await saveEd("approved"); dlg.close(); return render(); }
-    if (a === "prev" || a === "next1") { if (role() !== "checker" && !["ready", "approved"].includes(ED.c.status)) await saveEd(); const p = ED.pos + (a === "next1" ? 1 : -1), [sid, stid] = ED.order[p].split("|"); render(); return openEditor(sid, stid); }
+    if (a === "next") { for (const [, st] of strands()) for (const s of visible()) { const c = cmt(String(ui.term), s.id, st.id); if (c && c.status === "ready") { ui.rview = "subject"; ui.rstrand = st.id; render(); return focusCard(s.id, st.id); } } return alert("There are no comments waiting to be checked."); }
+  }
+  function focusCard(sid, stid) { setTimeout(() => { const el = document.getElementById(`rc-${sid}-${stid}`); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1600); } }, 60); }
+  async function cardAction(a, key) {
+    const [sid, stid] = key.split("|"), st = findStrand(stid)[1], t = String(ui.term), ta = document.getElementById(`rt-${key}`);
+    if (a === "redraft") { const d = draft(sid, st, ui.term); ta.value = d.text; await upC(sid, stid, { text: d.text, level: d.lv, band: d.band }); return render(); }
+    if (a === "send") { await upC(sid, stid, { text: ta.value.trim(), status: "ready", note: "" }); render(); return focusCard(sid, stid); }
+    if (a === "recall") { await upC(sid, stid, { status: "draft" }); render(); return focusCard(sid, stid); }
+    if (a === "approve") { await upC(sid, stid, { text: ta.value.trim(), status: "approved", note: "" }); render(); return focusCard(sid, stid); }
+    if (a === "return") { const n = (document.getElementById(`rk-${key}`) || {}).value || ""; if (!n.trim()) return alert("Add a note so the teacher knows what to change."); await upC(sid, stid, { note: n.trim(), status: "changes" }); render(); return focusCard(sid, stid); }
   }
 
   function reportHTML(s) {
-    const t = ui.term, k = String(t), all = allStrands(), ov = avgEval(s.id, all, k), pr = avgProgress(s.id, all, t);
-    let rows = "";
-    C.subjects.forEach(sb => sb.strands.forEach((st, i) => { const e = strandEval(s.id, st, k), p = progress(s.id, st, t), ot = onTrack(s.id, st, t), cm = cmt(k, s.id, st.id);
-      rows += `<tr><td><b>${esc(sb.name)}</b>${sb.name !== st.name ? `<br>${esc(st.name)}` : ""}</td><td>${esc(lab(level(s.id, st, "b")))}</td><td>${esc(lab(level(s.id, st, k)))}</td><td>${e ? POS[e.band] : "–"}</td><td>${p ? PROG[p.band] : "–"}</td><td>${ot == null ? "–" : ot.ok ? "On track" : "Needs support"}</td></tr>
-        ${cm && cm.status === "approved" && cm.text ? `<tr class="cm"><td colspan="6">${esc(cm.text)}</td></tr>` : ""}`; }));
-    const pl = plan(s.id, t), next = pl.gaps.filter(g => g.pri < 2).slice(0, 3).map(g => `${g.nm}: ${g.fix}`).concat(pl.ahead.slice(0, 2).map(a => `${a.nm}: ${a.text}`));
-    return `<section class="rep"><div class="rh"><img src="logo.png" alt=""><div><h1>${esc(s.full_name)}</h1><p>${esc(ctx.schoolName || "")}${ctx.schoolName ? ", " : ""}${esc(cls.name)}. ${esc(C.terms[t])} report, ${esc(cls.year)}</p></div></div>
+    const t = ui.term, k = String(t), all = allStrands(), ov = avgEval(s.id, all, k), withG = ui.printGraphs !== false;
+    const pbs = all.map(st => progFinal(s.id, st, t)).filter(Boolean).map(p => ({ below: -1, inline: 0, above: 1 })[p.band]), pav = pbs.length ? pbs.reduce((x, y) => x + y, 0) / pbs.length : null;
+    const pr = pav == null ? null : { band: pav < -.33 ? "below" : pav > .33 ? "above" : "inline" };
+    let rows = "", graphs = "";
+    C.subjects.forEach(sb => sb.strands.forEach(st => { const e = strandEval(s.id, st, k), lv = level(s.id, st, k), p = progFinal(s.id, st, t), ot = onTrack(s.id, st, t), cm = cmt(k, s.id, st.id);
+      const posB = lv != null ? (C.gradePos[lv] || (e && e.band)) : null;
+      rows += `<tr><td><b>${esc(sb.name)}</b>${sb.name !== st.name ? `<br>${esc(st.name)}` : ""}</td><td>${esc(lab(level(s.id, st, "b")))}</td><td>${esc(lab(lv))}</td><td>${posB ? POS[posB] : "–"}</td><td>${p ? PROG[p.band] : "–"}</td><td>${ot == null ? "–" : ot.ok ? "On track" : "Needs support"}</td></tr>
+        ${cm && cm.status === "approved" && cm.text ? `<tr class="cm"><td colspan="6">${esc(cm.text)}<br><b>Next step:</b> ${esc(nsFor(s.id, st, t))}</td></tr>` : ""}`;
+      if (withG) graphs += `<div class="rg"><b>${esc(sname(sb, st))}</b>${chart(s.id, st)}</div>`; }));
+    return `<section class="rep"><div class="rh"><img src="logo.png" alt=""><div><h1>${esc(s.full_name)}</h1><p>${s.student_number ? `Student ID ${esc(s.student_number)}. ` : ""}${esc(ctx.schoolName || "")}${ctx.schoolName ? ", " : ""}${esc(cls.name)}. ${esc(C.terms[t])} report, ${esc(cls.year)}</p></div></div>
       <p class="sum"><b>Overall:</b> level ${ov ? esc(lab(ov.lv)) : "–"}, ${ov ? POS[ov.band].toLowerCase() : "not yet assessed"}. Progress since the start of the year: ${pr ? PROG[pr.band].toLowerCase() : "–"}.</p>
-      <table><thead><tr><th>Subject</th><th>Start of year</th><th>Now</th><th>Against grade level</th><th>Progress</th><th>End-of-year target</th></tr></thead><tbody>${rows}</tbody></table>
-      ${next.length ? `<h2>Next steps</h2><ul>${next.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>`;
+      <table><thead><tr><th>Subject</th><th>Start of year</th><th>${esc(C.terms[t])}</th><th>Against curriculum standards</th><th>Progress</th><th>End-of-year target</th></tr></thead><tbody>${rows}</tbody></table>
+      ${withG ? `<h2>Progress from the start of the year</h2><div class="rgs">${graphs}</div>` : ""}</section>`;
   }
   function printReports(list) {
-    let p = document.getElementById("tnPrint"); if (!p) { p = document.createElement("div"); p.id = "tnPrint"; document.body.appendChild(p); }
-    p.innerHTML = list.map(reportHTML).join("");
-    document.querySelectorAll("dialog[open]").forEach(d => d.close());
-    setTimeout(() => window.print(), 300);
+    const go = withG => { ui.printGraphs = withG; let p = document.getElementById("tnPrint"); if (!p) { p = document.createElement("div"); p.id = "tnPrint"; document.body.appendChild(p); }
+      p.innerHTML = list.map(reportHTML).join(""); document.querySelectorAll("dialog[open]").forEach(d => d.close()); setTimeout(() => window.print(), 300); };
+    let d = document.getElementById("tnPrintOpt"); if (!d) { d = document.createElement("dialog"); d.id = "tnPrintOpt"; document.body.appendChild(d); }
+    d.innerHTML = `<div class="dlg"><h2 style="margin:0 0 6px;color:var(--plum);font-family:Poppins,sans-serif">Print ${list.length === 1 ? "report" : list.length + " reports"}</h2><p class="note">Choose <b>Save as PDF</b> in the print window to download a PDF instead of printing.</p>
+      <label class="check" style="margin:12px 0"><input type="checkbox" id="pgG" checked> Include progress graphs</label><div class="row"><button class="btn" id="pgGo">Print</button><button class="btn ghost" id="pgX">Cancel</button></div></div>`;
+    document.querySelectorAll("dialog[open]").forEach(x => x.close()); d.showModal();
+    document.getElementById("pgX").onclick = () => d.close(); document.getElementById("pgGo").onclick = () => { const g = document.getElementById("pgG").checked; d.close(); go(g); };
   }
 
   async function load() {
@@ -278,7 +320,7 @@
       sb.from("students").select("*").eq("class_id", cls.id).eq("archived", false).order("full_name")]);
     if (s.error || st.error) throw (s.error || st.error);
     if (!s.data.length) throw new Error("This school’s setup for " + cls.year + " couldn’t be found.");
-    C = s.data[0].config; if (ctx.subjects) C = Object.assign({}, C, { subjects: C.subjects.filter(x => ctx.subjects.includes(x.id)) }); studs = st.data;
+    C = s.data[0].config; applyLabels(C); if (ctx.subjects) C = Object.assign({}, C, { subjects: C.subjects.filter(x => ctx.subjects.includes(x.id)) }); studs = st.data;
     const ids = studs.map(x => x.id);
     R = {}; ST = {}; LV = {}; TAUGHT = new Set();
     const tg = await sb.from("taught").select("obj_id").eq("class_id", cls.id);
@@ -291,6 +333,7 @@
       l.data.forEach(x => { ((LV[x.student_id] = LV[x.student_id] || {})[x.strand_id] = (LV[x.student_id] || {})[x.strand_id] || {})[x.term] = x.level; });
       const cm = await sb.from("report_comments").select("*").in("student_id", ids); if (cm.error) throw cm.error;
       CM = {}; cm.data.forEach(x => { ((CM[x.term] = CM[x.term] || {})[x.student_id] = (CM[x.term] || {})[x.student_id] || {})[x.strand_id] = x; });
+      const ns = await sb.from("next_steps").select("*").in("student_id", ids); NS = {}; if (!ns.error) ns.data.forEach(x => { ((NS[x.term] = NS[x.term] || {})[x.student_id] = (NS[x.term] || {})[x.student_id] || {})[x.strand_id] = x.text; });
     }
   }
 
@@ -313,7 +356,7 @@
   function lvOpts(s, st, k) { const t = tLv(s.id, st.id, k), e = strandEval(s.id, st, k);
     return `<option value="">Auto (${e ? esc(lab(e.sug)) + " · " + e.pct + "%" : "–"})</option>` + C.scale.map((x, i) => `<option value="${i}" ${t === i ? "selected" : ""}>${esc(x)}</option>`).join(""); }
   function summary(s, st) { const k = String(ui.term), e = strandEval(s.id, st, k), p = progress(s.id, st, ui.term);
-    return { pos: badge(e ? e.band : "none", POS[e ? e.band : "none"]), prog: p ? badge(p.band, (p.steps > 0 ? "+" : "") + p.steps + " · " + PROG[p.band]) : badge("none", "–") }; }
+    return { pos: badge(e ? e.band : "none", POSS[e ? e.band : "none"]), prog: p ? badge(p.band, (p.steps > 0 ? "+" : "") + p.steps + " · " + PROGS[p.band]) : badge("none", "–") }; }
 
   function render() {
     const subs = C.subjects; if (!subs.find(s => s.id === ui.sub)) ui.sub = subs[0]?.id;
@@ -332,7 +375,7 @@
       <div class="tabs2" role="tablist">${tabs.map(([m, l]) => `<button role="tab" data-mode="${m}" aria-selected="${ui.mode === m}">${l}</button>`).join("")}</div>
       <div class="fbar">${sel("shTerm", "Term", C.terms.map((x, i) => [i, x]), t)}${sel("shGrp", "Students", [["All", "All students"], ...(C.groups || []).map(g => [g, g])], ui.group)}
         ${ui.mode === "strand" ? sel("shSub", "Subject", subs.map(x => [x.id, x.name]), ui.sub) + sel("shStr", "Strand", sb.strands.map(x => [x.id, x.name]), ui.strand) : ""}</div>
-      <div class="legend"><span><i class="dot" style="width:18px;height:18px"></i>Not assessed</span><span><i class="dot s" style="width:18px;height:18px"></i>Secure</span><span><i class="dot n" style="width:18px;height:18px"></i>Not yet secure</span><span><i class="dot e" style="width:18px;height:18px"></i>Exceeding</span><span>Scores are shaded ${badge("below", "below")} ${badge("inline", "in line")} ${badge("above", "above")}</span></div>`;
+      <div class="legend"><span><i class="dot" style="width:18px;height:18px"></i>Not assessed</span>${OS().map(x => `<span><i class="dot ${dotCls(x.code)}" style="width:18px;height:18px;font-size:10px">${esc(x.short)}</i>${esc(x.label)}</span>`).join("")}<span>Tap a circle to change it</span><span>Scores are shaded ${badge("below", "below")} ${badge("inline", "in line")} ${badge("above", "above")}</span></div>`;
     if (!studs.length) { ctx.el.innerHTML = h + `<div class="card"><p class="note">This class has no students yet. The school lead adds them in Classes and students.</p></div>`; return; }
     if (ui.mode === "overview") return renderOverview(h.replace(/<div class="legend">[\s\S]*$/, ""));
     if (ui.mode === "reports") return renderReports(h.replace(/<div class="legend">[\s\S]*$/, ""));
@@ -340,16 +383,16 @@
     bc.forEach(c => th += `<th class="colh"><b>${esc(c.name)}</b>${hint(c)}</th>`);
     th += `<th class="colh"><b>Baseline level</b>scale</th>`;
     tc.forEach(c => { if (c.type === "objectives") objs(c, t).forEach(o => { const tg = TAUGHT.has(o.id);
-      th += `<th class="obj"><span class="t">${esc(o.text)}</span><label><input type="checkbox" data-taught="${o.id}" ${tg ? "checked" : ""}> Taught</label><button class="mini" data-all="${o.id}" ${tg ? "" : "disabled"}>Mark all secure</button></th>`; });
+      th += `<th class="obj"><span class="t">${esc(o.text)}</span><label><input type="checkbox" data-taught="${o.id}" ${tg ? "checked" : ""}> Taught</label><button class="mini" data-all="${o.id}" ${tg ? "" : "disabled"}>Mark all ${esc(osOf(defCode()).label.toLowerCase())}</button></th>`; });
       else th += `<th class="colh"><b>${esc(c.name)}</b>${hint(c)}</th>`; });
     if (!n) th += `<th class="note">No columns for this term</th>`;
     th += `<th>Position</th><th class="colh"><b>Teacher level</b>Auto shows the suggestion</th><th>Progress from baseline</th></tr></thead><tbody>`;
     visible().forEach(s => { const sm = summary(s, st);
-      th += `<tr><td class="namecol"><button class="name" data-prof="${s.id}">${esc(s.full_name)}</button><div class="tags">${(s.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></td>`;
+      th += `<tr><td class="namecol"><button class="name" data-prof="${s.id}">${esc(s.full_name)}</button>${s.student_number ? `<span class="sid">${esc(s.student_number)}</span>` : ""}<div class="tags">${(s.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></td>`;
       bc.forEach(c => th += `<td>${cell(s, c, "b")}</td>`);
       th += `<td><select class="lv" data-lv="${s.id}|${st.id}|b" aria-label="Baseline level for ${esc(s.full_name)}">${lvOpts(s, st, "b")}</select></td>`;
       tc.forEach(c => { if (c.type === "objectives") objs(c, t).forEach(o => { const tg = TAUGHT.has(o.id), v = stat(s.id, o.id);
-        th += `<td><button class="dot ${v}" data-cell="${s.id}|${o.id}" ${tg ? "" : "disabled"} aria-label="${esc(s.full_name)}, ${esc(o.text)}: ${tg ? DOTL[v] : "not taught yet"}">${DOT[v]}</button></td>`; });
+        th += `<td><button class="dot ${dotCls(v)}" data-cell="${s.id}|${o.id}" ${tg ? "" : "disabled"} title="${esc(v ? osOf(v).label : "Not assessed")}" aria-label="${esc(s.full_name)}, ${esc(o.text)}: ${tg ? esc(v ? osOf(v).label : "not assessed") : "not taught yet"}">${dotTxt(v)}</button></td>`; });
         else th += `<td>${cell(s, c, k)}</td>`; });
       if (!n) th += `<td></td>`;
       th += `<td id="pos-${s.id}">${sm.pos}</td><td><select class="lv" data-lv="${s.id}|${st.id}|${k}" aria-label="Teacher level for ${esc(s.full_name)}">${lvOpts(s, st, k)}</select></td><td id="prog-${s.id}">${sm.prog}</td></tr>`; });
@@ -368,7 +411,10 @@
     if (t.dataset.pclose) return t.closest("dialog").close();
     if (t.dataset.print) return printReports([studs.find(x => x.id === t.dataset.print)]);
     if (t.dataset.rp) { t.disabled = true; try { await reportAction(t.dataset.rp, t); } finally { t.disabled = false; } return; }
-    if (t.dataset.edit) { const [a, b] = t.dataset.edit.split("|"); return openEditor(a, b); }
+    if (t.dataset.rv) { ui.rview = t.dataset.rv; return render(); }
+    if (t.dataset.rgo) { const [v, a, b] = t.dataset.rgo.split("|"); ui.rview = v; if (v === "student") ui.rstud = a; else { ui.rstrand = a; } render(); if (v === "subject" && b) focusCard(b, a); return; }
+    if (t.dataset.rstep) { const vs = visible(), i = vs.findIndex(x => x.id === ui.rstud) + +t.dataset.rstep; if (vs[i]) { ui.rstud = vs[i].id; render(); window.scrollTo(0, 0); } return; }
+    if (t.dataset.rc) { t.disabled = true; try { await cardAction(t.dataset.rc, t.dataset.k); } finally { t.disabled = false; } return; }
     if (t.dataset.pstrand) { ui.pStrand = t.dataset.pstrand; return openProfile(ui.pid); }
     if (t.dataset.sh === "back") return ctx.back();
     if (t.dataset.sh === "upload") {
@@ -383,22 +429,33 @@
     if (t.dataset.term) { ui.term = +t.dataset.term; return render(); }
     if (t.dataset.grp) { ui.group = t.dataset.grp; return render(); }
     if (t.dataset.cell) {
-      const [sid, oid] = t.dataset.cell.split("|"), nx = { "": "s", s: "n", n: "e", e: "" }[stat(sid, oid)];
+      const [sid, oid] = t.dataset.cell.split("|"), nx = cycle(stat(sid, oid));
       (ST[sid] = ST[sid] || {}); if (nx) ST[sid][oid] = nx; else delete ST[sid][oid];
-      t.className = "dot " + nx; t.textContent = DOT[nx]; t.setAttribute("aria-label", t.getAttribute("aria-label").replace(/: [^:]*$/, ": " + DOTL[nx]));
+      t.className = "dot " + dotCls(nx); t.innerHTML = dotTxt(nx); t.title = nx ? osOf(nx).label : "Not assessed"; t.setAttribute("aria-label", t.getAttribute("aria-label").replace(/: [^:]*$/, ": " + (nx ? osOf(nx).label : "not assessed")));
       refreshRow(sid);
       run(nx ? ctx.sb.from("objective_status").upsert({ student_id: sid, obj_id: oid, status: nx }) : ctx.sb.from("objective_status").delete().eq("student_id", sid).eq("obj_id", oid));
       return;
     }
     if (t.dataset.all) {
-      const oid = t.dataset.all, rows = visible().filter(s => !stat(s.id, oid)).map(s => ({ student_id: s.id, obj_id: oid, status: "s" }));
-      rows.forEach(r => (ST[r.student_id] = ST[r.student_id] || {})[oid] = "s"); render();
+      const oid = t.dataset.all, rows = visible().filter(s => !stat(s.id, oid)).map(s => ({ student_id: s.id, obj_id: oid, status: defCode() }));
+      rows.forEach(r => (ST[r.student_id] = ST[r.student_id] || {})[oid] = r.status); render();
       if (rows.length) run(ctx.sb.from("objective_status").upsert(rows));
     }
   }
   async function onChange(e) {
-    const t = e.target; if (!ctx || !ctx.el.contains(t)) return;
+    const t = e.target; if (!ctx || !(ctx.el.contains(t) || (t.closest && t.closest("#tnProfile")))) return;
     if (t.id === "shCls") { const nc = ctx.siblings.find(x => x.id === t.value); return TNSheet.open(Object.assign({}, ctx, { cls: nc })); }
+    if (t.id === "rvStrand") { ui.rstrand = t.value; return render(); }
+    if (t.id === "rvStud") { ui.rstud = t.value; return render(); }
+    if (t.dataset.rlv) { const [sid, stid] = t.dataset.rlv.split("|"), k = String(ui.term), m = ((LV[sid] = LV[sid] || {})[stid] = (LV[sid] || {})[stid] || {});
+      if (t.value === "") delete m[k]; else m[k] = +t.value;
+      await run(t.value === "" ? ctx.sb.from("levels").delete().eq("student_id", sid).eq("strand_id", stid).eq("term", k) : ctx.sb.from("levels").upsert({ student_id: sid, strand_id: stid, term: k, level: +t.value }));
+      if (cmt(k, sid, stid)) await upC(sid, stid, { level: t.value === "" ? null : +t.value }); render(); return focusCard(sid, stid); }
+    if (t.dataset.rpg) { const [sid, stid] = t.dataset.rpg.split("|"); await upC(sid, stid, { progress: t.value || null }); render(); return focusCard(sid, stid); }
+    if (t.dataset.rtx) { const [sid, stid] = t.dataset.rtx.split("|"), c = cmt(String(ui.term), sid, stid); if (!c || c.text !== t.value.trim()) await upC(sid, stid, { text: t.value.trim() }); return; }
+    if (t.dataset.rns || t.dataset.pns) { const [sid, stid] = (t.dataset.rns || t.dataset.pns).split("|"), k = String(ui.term), v = t.value.trim(), st = findStrand(stid)[1];
+      const m = ((NS[k] = NS[k] || {})[sid] = (NS[k] || {})[sid] || {}); if (!v || v === nsAuto(sid, st, ui.term)) { delete m[stid]; return run(ctx.sb.from("next_steps").delete().eq("student_id", sid).eq("strand_id", stid).eq("term", k)); }
+      m[stid] = v; return run(ctx.sb.from("next_steps").upsert({ student_id: sid, strand_id: stid, term: k, text: v })); }
     if (t.id === "shTerm") { ui.term = +t.value; return render(); }
     if (t.id === "shGrp") { ui.group = t.value; return render(); }
     if (t.id === "shSub") { ui.sub = t.value; ui.strand = null; return render(); }
@@ -421,7 +478,9 @@
     }
   }
 
-  document.addEventListener("input", e => { if (e.target.id === "edText") count(); });
+  document.addEventListener("input", e => { const t = e.target; if (!t.dataset || !t.dataset.rtx) return; const n = t.value.trim().length, lim = (C.reports || {}).limit || 600, el = document.getElementById("rn-" + t.dataset.rtx);
+    if (el) { el.textContent = `${n} / ${lim}`; el.style.color = n > lim ? "var(--red)" : ""; el.style.fontWeight = n > lim ? "800" : ""; }
+    const b = document.querySelector(`[data-rc="send"][data-k="${t.dataset.rtx}"]`); if (b) b.disabled = !n || n > lim; });
   window.TNSheet = {
     async open(context) {
       ctx = context; cls = ctx.cls; pending = 0; if (ctx.mode) ui.mode = ctx.mode; if (ctx.role === "checker") ui.mode = "reports";

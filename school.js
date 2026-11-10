@@ -2,7 +2,10 @@
 (function () {
   const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const clamp = n => Math.max(0, Math.min(1, n));
-  const POS = { below: "Below grade level", inline: "In line", above: "Above grade level", none: "Not yet assessed" };
+  const POS = { below: "Below curriculum standards", inline: "In line with curriculum standards", above: "Above curriculum standards", none: "Not yet assessed" };
+  const PROG = { below: "Below expected progress", inline: "Expected progress", above: "Better than expected progress" };
+  const POSS = { below: "Below", inline: "In line", above: "Above", none: "Not yet assessed" }, PROGS = { below: "Below expected", inline: "Expected", above: "Better than expected" };
+  function applyLabels(cfg) { const L = (cfg && cfg.labels) || {}; ["below", "inline", "above"].forEach(k => { if (L.att && L.att[k]) POS[k] = L.att[k]; if (L.prog && L.prog[k]) PROG[k] = L.prog[k]; }); }
   const badge = (c, t) => `<span class="badge b-${c}">${t}</span>`;
   let ctx, C, year, classes = [], studs = [], R = {}, ST = {}, LV = {}, TG = {}, CMS = [], LINKS = [], STAFF = [], bound = false;
   let ui = { mode: "subject", term: 0, group: "All", grade: "All" };
@@ -17,7 +20,7 @@
     const sb = ctx.sb, sid = ctx.school.id;
     const s = await sb.from("school_setups").select("*").eq("school_id", sid).order("updated_at", { ascending: false }).limit(1);
     if (s.error) throw s.error; if (!s.data.length) throw new Error("Finish the school setup first.");
-    C = s.data[0].config; year = s.data[0].year;
+    C = s.data[0].config; applyLabels(C); year = s.data[0].year;
     const c = await sb.from("classes").select("*").eq("school_id", sid).eq("year", year); if (c.error) throw c.error; classes = c.data;
     const ids = new Set(classes.map(x => x.id));
     studs = (await fetchAll("students", "*")).filter(x => !x.archived && ids.has(x.class_id));
@@ -32,6 +35,15 @@
     STAFF = (await sb.from("profiles").select("id,full_name,email").eq("school_id", sid)).data || [];
   }
 
+  const DEF_OS = [{ code: "s", label: "Secure", short: "✓", kind: "secure" }, { code: "n", label: "Not yet secure", short: "!", kind: "notyet" }, { code: "e", label: "Exceeding", short: "+", kind: "exceed" }];
+  const OS = () => (C && C.objScale && C.objScale.length ? C.objScale : DEF_OS);
+  const osOf = v => OS().find(x => x.code === v) || DEF_OS.find(x => x.code === v) || { code: v, label: v, short: "?", kind: "secure" };
+  const credit = v => ({ notyet: 0, partial: .5, secure: 1, exceed: 1 })[osOf(v).kind] ?? 1;
+  const isEx = v => osOf(v).kind === "exceed", isGap = v => !!v && credit(v) < 1;
+  const _dc = v => v ? ({ notyet: "n", partial: "p", secure: "s", exceed: "e" })[osOf(v).kind] : "";
+  const _dt = v => v ? esc(osOf(v).short) : "";
+  const defCode = () => (OS().find(x => x.kind === "secure") || OS()[0]).code;
+  const cycle = v => { const order = [defCode(), ...OS().map(x => x.code).filter(c => c !== defCode())], i = order.indexOf(v); return v === "" || i < 0 ? order[0] : (order[i + 1] ?? ""); };
   const strands = () => { const o = []; C.subjects.forEach(sb => sb.strands.forEach(st => o.push([sb, st]))); return o; };
   const clsOf = s => classes.find(c => c.id === s.class_id);
   const objsFor = (c, gid, t) => ((c.objectives || {})[gid] || [])[t] || [];
@@ -42,7 +54,7 @@
     if (c.type === "comment") return null;
     if (c.type === "objectives") {
       if (k === "b") return null; const cl = clsOf(s), tg = TG[cl.id] || new Set(); let a = 0, sec = 0, ex = 0;
-      objsFor(c, cl.grade_id, +k).filter(o => tg.has(o.id)).forEach(o => { const v = stat(s.id, o.id); if (v) { a++; if (v !== "n") sec++; if (v === "e") ex++; } });
+      objsFor(c, cl.grade_id, +k).filter(o => tg.has(o.id)).forEach(o => { const v = stat(s.id, o.id); if (v) { a++; sec += credit(v); if (isEx(v)) ex++; } });
       if (!a) return null; const p = sec / a * 100, e = ex / a * 100; return { band: p < c.belowPct ? -1 : (p >= 90 && e >= c.abovePct) ? 1 : 0, norm: clamp(p / 100) };
     }
     const v = val(s.id, c.id, k); if (v === undefined || v === "") return null;
@@ -77,7 +89,7 @@
   }
   const bar = (c, n) => { const w = x => (c[x] || 0) / (n || 1) * 100; return `<div class="sbar" aria-hidden="true"><i style="width:${w("below")}%;background:var(--red)"></i><i style="width:${w("inline")}%;background:var(--sage)"></i><i style="width:${w("above")}%;background:var(--plum)"></i></div>`; };
   function groupTable(sts, t) {
-    let h = `<div class="tablewrap"><table class="small"><tr><th style="text-align:left">Group</th><th>Below</th><th>In line</th><th>Above</th><th>Expected progress+</th></tr>`;
+    let h = `<div class="tablewrap"><table class="small"><tr><th style="text-align:left">Group</th><th>Below</th><th>In line</th><th>Above</th><th>Expected progress or better</th></tr>`;
     ["All", ...(C.groups || [])].forEach(g => { const gs = filtered(g), r = summarise(gs, sts, t), known = gs.length - r.p.none;
       h += `<tr><td style="text-align:left">${g === "All" ? "All students" : esc(g)} (${gs.length})</td><td>${r.a.below}</td><td>${r.a.inline}</td><td>${r.a.above}</td><td>${known ? Math.round((r.p.inline + r.p.above) / known * 100) + "%" : "–"}</td></tr>`; });
     return h + `</table></div>`;
@@ -86,8 +98,8 @@
     const r = summarise(list, sts, t), n = list.length, known = n - r.p.none, cv = coverage(sts, t, list);
     return `<div class="card" style="margin:0"><h2>${title}</h2>
       ${cv ? `<p class="note" style="margin:0">Curriculum coverage: ${cv[0]} of ${cv[1]} objectives taught</p><div class="meter"><i style="width:${cv[0] / cv[1] * 100}%"></i></div>` : ""}
-      <h3>Attainment against grade level</h3>${bar(r.a, n)}<p class="note" style="margin:0">Below ${r.a.below}, in line ${r.a.inline}, above ${r.a.above}${r.a.none ? `, no data yet ${r.a.none}` : ""}</p>
-      <h3>Progress since baseline</h3>${bar(r.p, n)}<p class="note" style="margin:0">Below expected ${r.p.below}, expected ${r.p.inline}, above expected ${r.p.above}${known ? `. ${Math.round((r.p.inline + r.p.above) / known * 100)}% making expected progress or better` : ""}</p>
+      <h3>Attainment against curriculum standards</h3>${bar(r.a, n)}<p class="note" style="margin:0">${esc(POS.below)} ${r.a.below}, ${esc(POS.inline.toLowerCase())} ${r.a.inline}, ${esc(POS.above.toLowerCase())} ${r.a.above}${r.a.none ? `, no data yet ${r.a.none}` : ""}</p>
+      <h3>Progress since baseline</h3>${bar(r.p, n)}<p class="note" style="margin:0">${esc(PROG.below)} ${r.p.below}, ${esc(PROG.inline.toLowerCase())} ${r.p.inline}, ${esc(PROG.above.toLowerCase())} ${r.p.above}${known ? `. ${Math.round((r.p.inline + r.p.above) / known * 100)}% making expected or better than expected progress` : ""}</p>
       <h3>On track for end-of-year targets</h3><p class="note" style="margin:0">${r.n ? `${r.ok} of ${r.n} student targets (${Math.round(r.ok / r.n * 100)}%)` : "–"}</p>
       <h3>By group</h3>${groupTable(sts, t)}${extra || ""}</div>`;
   }
@@ -117,7 +129,7 @@
       const flags = [], k = String(t);
       st.cols.forEach(c => {
         if (c.type === "objectives") {
-          const map = {}; list.forEach(s => { const cl = clsOf(s), tg = TG[cl.id] || new Set(); objsFor(c, cl.grade_id, t).filter(o => tg.has(o.id)).forEach(o => { const m = map[o.id] = map[o.id] || { text: o.text, na: 0, ny: 0, n: 0 }; m.n++; const v = stat(s.id, o.id); if (!v) m.na++; if (v === "n") m.ny++; }); });
+          const map = {}; list.forEach(s => { const cl = clsOf(s), tg = TG[cl.id] || new Set(); objsFor(c, cl.grade_id, t).filter(o => tg.has(o.id)).forEach(o => { const m = map[o.id] = map[o.id] || { text: o.text, na: 0, ny: 0, n: 0 }; m.n++; const v = stat(s.id, o.id); if (!v) m.na++; if (isGap(v)) m.ny++; }); });
           Object.values(map).forEach(m => { if (m.na) flags.push(`${badge("none", m.na)} not assessed: ${esc(m.text)}`); if (m.ny >= Math.max(2, m.n / 3)) flags.push(`${badge("below", m.ny)} not yet secure: ${esc(m.text)}. Consider re-teaching to the group.`); });
         } else if (c.type !== "comment") { const kk = c.baseline ? "b" : k, x = list.filter(s => val(s.id, c.id, kk) == null).length; if (x) flags.push(`${badge("none", x)} missing: ${esc(c.name)}`); }
       });
@@ -132,14 +144,14 @@
       if (!known && !pk) { rows += `<tr><td style="text-align:left"><b>${esc(tn)}</b></td><td colspan="5" class="note" style="text-align:left">No data yet</td></tr>`; return; }
       rows += `<tr><td style="text-align:left"><b>${esc(tn)}</b></td><td style="min-width:160px">${bar(r.a, n)}</td><td>${r.a.below} / ${r.a.inline} / ${r.a.above}</td>
         <td>${pk ? Math.round((r.p.inline + r.p.above) / pk * 100) + "%" : "–"}</td><td>${r.n ? Math.round(r.ok / r.n * 100) + "%" : "–"}</td><td>${cv ? Math.round(cv[0] / cv[1] * 100) + "%" : "–"}</td></tr>`; });
-    return `<div class="tablewrap"><table class="small"><tr><th style="text-align:left">Term</th><th>Attainment</th><th>Below / in line / above</th><th>Expected progress+</th><th>On track</th><th>Coverage</th></tr>${rows}</table></div>`;
+    return `<div class="tablewrap"><table class="small"><tr><th style="text-align:left">Term</th><th>Attainment</th><th>Below / in line / above standards</th><th>Expected progress or better</th><th>On track</th><th>Coverage</th></tr>${rows}</table></div>`;
   }
   function yearView(list) {
     const grades = C.grades || [], all = strands().map(p => p[1]);
     let h = `<div class="card" style="margin:0 0 16px"><h2>${ui.grade === "All" ? "Whole school" : esc((grades.find(g => g.id === ui.grade) || {}).name)}, all subjects, whole year</h2><p class="note">Each term side by side, so you can see how attainment and progress change across the year.</p>${yearRows(list, all)}</div><div style="display:grid;gap:16px">`;
     if (ui.mode === "strand") strands().forEach(([sb, st]) => h += `<div class="card" style="margin:0"><h2>${esc(sb.name === st.name ? sb.name : sb.name + ": " + st.name)}</h2>${yearRows(list, [st])}</div>`);
     else C.subjects.forEach(sb => h += `<div class="card" style="margin:0"><h2>${esc(sb.name)}</h2>${yearRows(list, sb.strands)}</div>`);
-    return h + `</div><p class="note">Bars show below (red), in line (green) and above (plum). Expected progress+ is the share of students making expected progress or better since baseline.</p>`;
+    return h + `</div><p class="note">Bars show below (red), in line (green) and above (plum). Expected progress+ is the share of students making expected or better than expected progress since baseline.</p>`;
   }
   function reportsTracker(list) {
     const t = String(ui.term), byKey = {}; CMS.forEach(x => { if (x.term === t) byKey[x.student_id + "|" + x.strand_id] = x.status; });
