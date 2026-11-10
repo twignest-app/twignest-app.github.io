@@ -54,7 +54,7 @@
   function avgEval(sid, list, k) {
     const ls = list.map(st => [level(sid, st, k), strandEval(sid, st, k)]).filter(x => x[0] != null); if (!ls.length) return null;
     const lv = Math.round(ls.reduce((a, x) => a + x[0], 0) / ls.length), bs = ls.filter(x => x[1]).map(x => ({ below: -1, inline: 0, above: 1 })[x[1].band]);
-    const b = bs.length ? bs.reduce((a, x) => a + x, 0) / bs.length : 0; return { lv, band: bs.length ? (b < -.33 ? "below" : b > .33 ? "above" : "inline") : "none" };
+    const b = bs.length ? bs.reduce((a, x) => a + x, 0) / bs.length : 0; return { lv, band: bs.length ? (C.gradePos[lv] || (b < -.33 ? "below" : b > .33 ? "above" : "inline")) : "none" };
   }
   function avgProgress(sid, list, t) {
     const ps = list.map(st => progress(sid, st, t)).filter(Boolean); if (!ps.length) return null;
