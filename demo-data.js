@@ -37,6 +37,12 @@
             [["Recall the 3, 4 and 8 times tables", "Quick daily times-table practice and games."], ["Multiply a 2-digit number by a 1-digit number", "Use arrays and the grid method."], ["Solve missing number problems", "Use bar models to find missing numbers."]],
             [["Solve two-step word problems", "Underline key information and draw a bar model first."], ["Divide using known multiplication facts", "Link division to times tables with fact families."], ["Estimate and check with the inverse", "Round to estimate, then check with the inverse."]]]) } }),
           col("mn_eot", "End-of-term assessment", "score", { max: 40, below: 20, above: 34 })] }] },
+      { id: "arb", name: "اللغة العربية", lang: "ar", strands: [
+        { id: "ar_r", name: "القراءة", cols: [col("ar_b", "تقييم القراءة الأولي", "list", { baseline: true, options: ["دون المتوقع", "ضمن المتوقع", "فوق المتوقع"], below: 1, above: 2 }),
+          col("ar_obj", "أهداف القراءة", "objectives", { belowPct: 70, abovePct: 30, objectives: { g2: O("ar", [
+            [["قراءة الكلمات ذات المقاطع الطويلة والقصيرة قراءة صحيحة", "التدرب يوميا على قراءة بطاقات الكلمات ذات المقاطع الطويلة والقصيرة."], ["تحديد الفكرة الرئيسة في نص قصير", "قراءة نصوص قصيرة وتلخيص كل نص في جملة واحدة."], ["التمييز بين التاء المربوطة والتاء المفتوحة", "تصنيف كلمات حسب نوع التاء في أنشطة صفية قصيرة."]],
+            [["استنتاج مشاعر الشخصيات من أحداث القصة", "طرح أسئلة مثل: كيف عرفت؟ مع الرجوع إلى النص."], ["قراءة نص قصير قراءة جهرية معبرة", "التدرب على القراءة الجهرية مع مراعاة علامات الترقيم."], ["التمييز بين اللام الشمسية واللام القمرية", "تصنيف كلمات تبدأ باللام الشمسية واللام القمرية."]],
+            [["استخراج معلومات من نص معلوماتي", "استخدام العناوين والكلمات المفتاحية للبحث عن المعلومات."], ["توظيف مفردات جديدة في جمل مفيدة", "كتابة جملة يومية بكلمة جديدة من القراءة."], ["إعادة سرد قصة بتسلسل صحيح", "استخدام خريطة القصة لإعادة السرد بالترتيب."]]]) } })] }] },
       { id: "sci", name: "Science", strands: [
         { id: "sc", name: "Science", cols: [col("sc_b", "Baseline teacher assessment", "list", { baseline: true, options: WT, below: 1, above: 2 }),
           col("sc_eot", "End-of-term assessment", "score", { max: 30, below: 15, above: 26 }), col("sc_obj", "Science objectives", "objectives", { belowPct: 70, abovePct: 30, objectives: { g2: O("sc", [
@@ -51,24 +57,26 @@
       { id: "u2", full_name: "Sara Ahmed", email: "sara@demo.school", role: "teacher", school_id: "s1", active: true },
       { id: "u3", full_name: "Daniel Brooks", email: "daniel@demo.school", role: "teacher", school_id: "s1", active: true },
       { id: "u4", full_name: "Noura Saeed", email: "noura@demo.school", role: "checker", school_id: "s1", active: true },
+      { id: "u6", full_name: "Huda Salem", email: "huda@demo.school", role: "teacher", school_id: "s1", active: true },
       { id: "u5", full_name: "New Teacher", email: "new@demo.school", role: "teacher", school_id: "s1", active: false }],
     school_setups: [{ id: "r1", school_id: "s1", year: "2026–2027", status: "live", config }],
     classes: [{ id: "k1", school_id: "s1", year: "2026–2027", grade_id: "g2", name: "2A" }, { id: "k2", school_id: "s1", year: "2026–2027", grade_id: "g2", name: "2B" }],
-    class_teachers: [{ id: "ct1", class_id: "k1", teacher_id: "u2", subject_id: null }, { id: "ct2", class_id: "k2", teacher_id: "u3", subject_id: null }],
+    class_teachers: [{ id: "ct1", class_id: "k1", teacher_id: "u2", subject_id: null }, { id: "ct2", class_id: "k2", teacher_id: "u3", subject_id: null }, { id: "ct3", class_id: "k1", teacher_id: "u6", subject_id: "arb" }, { id: "ct4", class_id: "k2", teacher_id: "u6", subject_id: "arb" }],
     students: [], results: [], objective_status: [], levels: [], taught: [], report_comments: [], next_steps: [] };
 
   const names = [["Layla Hassan", ["EAL"]], ["Omar Khalid", []], ["Yusuf Rahman", ["SEN"]], ["Mariam Al Shamsi", ["Emirati", "G&T"]], ["Ahmed Al Mansoori", ["Emirati"]], ["Sara Ibrahim", []], ["Hamdan Al Ketbi", ["Emirati"]], ["Aisha Siddiqui", ["EAL"]],
     ["Zayed Al Nuaimi", ["Emirati", "SEN"]], ["Noor Fathi", ["G&T"]], ["Adam Youssef", []], ["Fatima Al Ali", ["Emirati"]], ["Rayan Malik", ["EAL", "SEN"]], ["Hessa Al Suwaidi", ["Emirati"]], ["Ali Hamdan", []], ["Lina Haddad", ["EAL"]],
     ["Khalid Al Zaabi", ["Emirati"]], ["Maya Thomas", []], ["Ibrahim Saleh", ["EAL"]], ["Reem Al Hosani", ["Emirati", "G&T"]], ["Jad Nassar", []], ["Salma Farouk", ["SEN"]], ["Rashid Al Kaabi", ["Emirati"]], ["Hana Yousef", ["EAL"]]];
+  const AR_NAMES = {"Layla Hassan": "ليلى حسن", "Omar Khalid": "عمر خالد", "Yusuf Rahman": "يوسف رحمن", "Mariam Al Shamsi": "مريم الشامسي", "Ahmed Al Mansoori": "أحمد المنصوري", "Sara Ibrahim": "سارة إبراهيم", "Hamdan Al Ketbi": "حمدان الكتبي", "Aisha Siddiqui": "عائشة صديقي", "Zayed Al Nuaimi": "زايد النعيمي", "Noor Fathi": "نور فتحي", "Adam Youssef": "آدم يوسف", "Fatima Al Ali": "فاطمة العلي", "Rayan Malik": "ريان مالك", "Hessa Al Suwaidi": "حصة السويدي", "Ali Hamdan": "علي حمدان", "Lina Haddad": "لينا حداد", "Khalid Al Zaabi": "خالد الزعابي", "Ibrahim Saleh": "إبراهيم صالح", "Reem Al Hosani": "ريم الحوسني", "Jad Nassar": "جاد نصار", "Salma Farouk": "سلمى فاروق", "Rashid Al Kaabi": "راشد الكعبي", "Hana Yousef": "هنا يوسف"};
   const ability = {};
-  names.forEach(([n, g], i) => { const id = "p" + i; db.students.push({ id, school_id: "s1", class_id: i % 2 ? "k2" : "k1", full_name: n, student_number: String(20140 + i), groups: g, archived: false });
+  names.forEach(([n, g], i) => { const id = "p" + i; db.students.push({ id, school_id: "s1", class_id: i % 2 ? "k2" : "k1", full_name: n, arabic_name: AR_NAMES[n] || null, student_number: String(20140 + i), groups: g, archived: false });
     ability[id] = g.includes("G&T") ? .88 + rnd() * .1 : g.includes("SEN") ? .28 + rnd() * .2 : .5 + rnd() * .4; });
   const put = (sid, cid, term, v) => db.results.push({ student_id: sid, col_id: cid, term, value: String(v) });
   const clamp = x => Math.max(0, Math.min(1, x));
   db.students.forEach(s => {
     const a = ability[s.id], j = () => (rnd() - .5) * .18, a1 = clamp(a + .05 + j()), a2 = clamp(a + .11 + j());
     put(s.id, "rd_b", "b", Math.round(76 + clamp(a + j()) * 48)); put(s.id, "mn_b", "b", Math.round(76 + clamp(a + j()) * 48));
-    put(s.id, "wr_b", "b", WT[Math.min(2, Math.floor(clamp(a + j()) * 2.6))]); put(s.id, "sc_b", "b", WT[Math.min(2, Math.floor(clamp(a + j()) * 2.6))]);
+    put(s.id, "wr_b", "b", WT[Math.min(2, Math.floor(clamp(a + j()) * 2.6))]); put(s.id, "sc_b", "b", WT[Math.min(2, Math.floor(clamp(a + j()) * 2.6))]); put(s.id, "ar_b", "b", ["دون المتوقع", "ضمن المتوقع", "فوق المتوقع"][Math.min(2, Math.floor(clamp(a + j()) * 2.6))]);
     put(s.id, "sp_b", "b", Math.round(20 * clamp(.35 + a * .5 + j())));
     put(s.id, "rd_age", "0", (6.4 + a1 * 3).toFixed(1)); put(s.id, "rd_age", "1", (6.7 + a2 * 3).toFixed(1));
     put(s.id, "sp_t", "0", Math.round(20 * clamp(.5 + a1 * .48))); put(s.id, "sp_t", "1", Math.round(20 * clamp(.55 + a2 * .45)));

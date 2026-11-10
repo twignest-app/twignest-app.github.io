@@ -15,6 +15,14 @@
     rubric: { label: "Rubric score", help: "A total rubric score, such as a Summative Assessment Task." },
     comment: { label: "Comment", help: "Free text. Not used in calculations." }
   };
+  const BANK_AR = [
+    ["أداء {name} في {strand} في بداياته الأولى، ويحتاج إلى دعم مكثف ومستمر من المعلم للمشاركة في التعلم.", "أداء {name} في {strand} في مراحله الأولى، ويحتاج إلى دعم كبير للوصول إلى التعلم.", "يظهر أداء {name} في {strand} خطوات أولى صغيرة بدعم كبير من المعلم."],
+    ["بدأت مهارات {name} في {strand} بالتطور، مع الاعتماد على نمذجة المعلم لإنجاز المهام.", "بدأت مهارات {name} في {strand} بالتطور، ويكون التعلم أفضل مع دعم المعلم ونمذجته.", "تتطور المهارات الأولية لدى {name} في {strand}، مع بدء إنجاز بعض المهام بدعم أقل."],
+    ["تتطور مهارات {name} في {strand} نحو المستوى المتوقع، مع الحاجة إلى دعم منتظم.", "تتطور مهارات {name} في {strand} بثبات نحو المستوى المتوقع، مع قدر من الدعم.", "أصبح أداء {name} في {strand} قريبا من المستوى المتوقع، مع الحاجة إلى الدعم في بعض الأحيان فقط."],
+    ["بلغ أداء {name} في {strand} المستوى المتوقع، مع ثقة متنامية في تطبيق التعلم الجديد.", "أداء {name} في {strand} في المستوى المتوقع، مع تطبيق التعلم الجديد بثقة متزايدة.", "أداء {name} في {strand} في المستوى المتوقع بثقة، مع تطبيق التعلم الجديد بدعم قليل."],
+    ["أداء {name} في {strand} ثابت في المستوى المتوقع، مع بداية التطبيق المستقل للمهارات.", "أداء {name} في {strand} ثابت في المستوى المتوقع، مع تطبيق المهارات باستقلالية.", "أداء {name} في {strand} ثابت جدا، مع تطبيق المهارات باستقلالية ودقة."],
+    ["أداء {name} في {strand} أعلى من المستوى المتوقع، مع بداية تطبيق المهارات في سياقات جديدة.", "أداء {name} في {strand} أعلى من المستوى المتوقع، مع تطبيق المهارات بثقة في سياقات جديدة.", "أداء {name} في {strand} أعلى بكثير من المستوى المتوقع، مع تطبيق المهارات بثقة ودقة في سياقات جديدة."],
+    ["أداء {name} في {strand} متميز، مع فهم عميق للتعلم.", "أداء {name} في {strand} متميز، مع فهم ممتاز وتطبيق مبدع للمهارات.", "أداء {name} في {strand} متميز جدا، مع فهم استثنائي وتطبيق مبدع ومستقل للمهارات."]];
   const DEF_OS = [{ code: "s", label: "Secure", short: "✓", kind: "secure" }, { code: "n", label: "Not yet secure", short: "!", kind: "notyet" }, { code: "e", label: "Exceeding", short: "+", kind: "exceed" }];
   const FOUR_OS = [{ code: "n", label: "Emerging", short: "E", kind: "notyet" }, { code: "m2", label: "Developing", short: "D", kind: "partial" }, { code: "s", label: "Secure", short: "S", kind: "secure" }, { code: "e", label: "Mastery", short: "M", kind: "exceed" }];
   const KINDS = { notyet: "Not yet secure (counts 0)", partial: "Partly secure (counts half)", secure: "Secure (counts fully)", exceed: "Exceeding (counts fully, shows greater depth)" };
@@ -95,6 +103,7 @@
         });
       });
     });
+    if (C.subjects.some(x => x.lang === "ar")) C.scale.forEach((lv, i) => { const r = (C.reports.bankAr || BANK_AR)[i] || []; if (BANDS.some((b, j) => !(r[j] || "").trim())) block.push([`Arabic comment bank: level ${lv} is missing a Low, Middle or High comment.`, 7]); });
     C.scale.forEach((lv, i) => { const r = C.reports.bank[i] || []; if (BANDS.some((b, j) => !(r[j] || "").trim())) block.push([`Comment bank: level ${lv} is missing a Low, Middle or High comment.`, 7]); });
     return { block, warn };
   }
@@ -253,8 +262,8 @@
     if (ui.step === 3) {
       h += `<div class="card"><h2>Subjects and strands</h2><p class="note">Split a subject into strands to track them separately, such as English into reading, writing, spelling, and speaking and listening. A subject with no split needs one strand with the same name.</p>`;
       C.subjects.forEach(sb => {
-        h += `<div class="colcard"><div class="row"><input type="text" aria-label="Subject name" data-sub="${sb.id}" value="${esc(sb.name)}" style="flex:1;font-weight:700"><button class="btn ghost small" data-act="del-sub" data-id="${sb.id}" ${sb.strands.some(strandLocked) ? 'disabled title="Data has been recorded"' : ""}>Remove subject</button></div>`;
-        sb.strands.forEach(st => h += `<div class="row" style="margin:6px 0 0 18px"><input type="text" aria-label="Strand name" data-strand="${st.id}" value="${esc(st.name)}" style="flex:1"><span class="note">${st.cols.length} columns</span><button class="btn ghost small" data-act="del-str" data-id="${st.id}" ${strandLocked(st) ? 'disabled title="Data has been recorded"' : ""}>Remove</button></div>`);
+        h += `<div class="colcard"><div class="row"><input type="text" dir="auto" aria-label="Subject name" data-sub="${sb.id}" value="${esc(sb.name)}" style="flex:1;font-weight:700"><select aria-label="Report language" data-sublang="${sb.id}" style="width:auto"><option value="en" ${sb.lang !== "ar" ? "selected" : ""}>Reports in English</option><option value="ar" ${sb.lang === "ar" ? "selected" : ""}>Reports in Arabic (right to left)</option></select><button class="btn ghost small" data-act="del-sub" data-id="${sb.id}" ${sb.strands.some(strandLocked) ? 'disabled title="Data has been recorded"' : ""}>Remove subject</button></div>`;
+        sb.strands.forEach(st => h += `<div class="row" style="margin:6px 0 0 18px"><input type="text" dir="auto" aria-label="Strand name" data-strand="${st.id}" value="${esc(st.name)}" style="flex:1"><span class="note">${st.cols.length} columns</span><button class="btn ghost small" data-act="del-str" data-id="${st.id}" ${strandLocked(st) ? 'disabled title="Data has been recorded"' : ""}>Remove</button></div>`);
         h += `<p style="margin:8px 0 0 18px"><button class="btn ghost small" data-act="add-str" data-id="${sb.id}">Add strand</button></p></div>`;
       });
       h += `<button class="btn ghost" data-act="add-sub">Add subject</button></div>`;
@@ -276,7 +285,11 @@
       <label for="s-limit">Character limit for each comment</label><input id="s-limit" type="number" min="100" data-cfg="limit" value="${C.reports.limit}" style="width:120px">
       <p class="note">Write a Low, Middle and High comment for every level. Use {name} for the student’s first name and {strand} for the subject or strand. TwigNest adds a strength and a next step from each student’s data.</p>
       <div class="tablewrap"><table><tr><th>Level</th>${BANDS.map(b => `<th>${b}</th>`).join("")}</tr>
-      ${C.scale.map((lv, i) => `<tr><td><b>${esc(lv)}</b></td>${BANDS.map((b, j) => `<td style="min-width:230px"><textarea aria-label="Level ${esc(lv)}, ${b}" data-bank="${i}|${j}" style="min-height:100px;font-size:14px">${esc((C.reports.bank[i] || [])[j] || "")}</textarea></td>`).join("")}</tr>`).join("")}</table></div></div>`;
+      ${C.scale.map((lv, i) => `<tr><td><b>${esc(lv)}</b></td>${BANDS.map((b, j) => `<td style="min-width:230px"><textarea aria-label="Level ${esc(lv)}, ${b}" data-bank="${i}|${j}" style="min-height:100px;font-size:14px">${esc((C.reports.bank[i] || [])[j] || "")}</textarea></td>`).join("")}</tr>`).join("")}</table></div></div>
+      ${C.subjects.some(x => x.lang === "ar") ? `<div class="card"><h2>Arabic comment bank</h2><p class="note">Used for subjects reported in Arabic (${C.subjects.filter(x => x.lang === "ar").map(x => esc(x.name)).join(", ")}). Written without tashkeel and worded to suit both boys and girls. Use {name} for the student’s Arabic name and {strand} for the subject or strand. Ask your Arabic team to check and adjust the wording.</p>
+        <p><button class="btn ghost small" data-act="bank-ar-reset">Use the TwigNest Arabic bank</button></p>
+        <div class="tablewrap"><table><tr><th>Level</th>${BANDS.map(b => `<th>${b}</th>`).join("")}</tr>
+        ${C.scale.map((lv, i) => `<tr><td><b>${esc(lv)}</b></td>${BANDS.map((b, j) => `<td style="min-width:230px"><textarea dir="rtl" lang="ar" aria-label="Arabic, level ${esc(lv)}, ${b}" data-bankar="${i}|${j}" style="min-height:100px;font-size:15px">${esc(((C.reports.bankAr || BANK_AR)[i] || [])[j] || "")}</textarea></td>`).join("")}</tr>`).join("")}</table></div></div>` : ""}`;
     if (ui.step === 8) h += `<div class="card"><h2>Check and finish</h2>
       ${v.block.length ? `<h3>To fix before teachers can use it</h3>` + v.block.map(([t, s, sid]) => `<div class="issue">${esc(t)} <button class="btn ghost small" data-step="${s}" ${sid ? `data-fix="${sid}"` : ""}>Fix</button></div>`).join("") : `<p class="ok">Everything needed is set up.</p>`}
       ${v.warn.length ? `<h3>Still to add</h3><p class="note">These don’t stop you finishing, and you can add them any time.</p>` + v.warn.map(([t, s, sid]) => `<div class="issue">${esc(t)} <button class="btn ghost small" data-step="${s}" ${sid ? `data-fix="${sid}"` : ""}>Add</button></div>`).join("") : ""}
@@ -312,6 +325,7 @@
     if (a === "obj-copy") { const from = document.getElementById("cpFrom").value, to = document.getElementById("cpTo").value; if (from === to) return alert("Choose two different grades.");
       if (countObj(to) && !confirm("The grade you’re copying to already has objectives. Replace them with a copy?")) return;
       objCols().forEach(({ c }) => { c.objectives[to] = ((c.objectives || {})[from] || []).map(l => l.map(o => ({ id: uid("o"), text: o.text, step: o.step }))); }); save(true); render(); return; }
+    if (a === "bank-ar-reset") C.reports.bankAr = BANK_AR.map(r => r.slice());
     if (a === "lab-reset") C.labels = JSON.parse(JSON.stringify(DEF_LAB));
     if (a === "os-add") os().push({ code: uid("k"), label: "New mark", short: "?", kind: "secure" });
     if (a === "os-del") { if (!confirm("Remove this mark? Objectives already given this mark will show as not assessed.")) return; os().splice(+t.dataset.i, 1); }
@@ -340,6 +354,8 @@
       if (f === "steps") C.steps = Math.max(0, +t.value || 0);
       if (f === "limit") C.reports.limit = Math.max(100, +t.value || 600);
     }
+    if (t.dataset.sublang) { const sb = C.subjects.find(x => x.id === t.dataset.sublang); sb.lang = t.value; if (t.value === "ar" && !C.reports.bankAr) C.reports.bankAr = BANK_AR.map(r => r.slice()); }
+    if (t.dataset.bankar) { const [i, j] = t.dataset.bankar.split("|").map(Number); C.reports.bankAr = C.reports.bankAr || BANK_AR.map(r => r.slice()); while (C.reports.bankAr.length <= i) C.reports.bankAr.push(["", "", ""]); C.reports.bankAr[i][j] = t.value.trim(); }
     if (t.dataset.lab) { const [g, k] = t.dataset.lab.split("|"); C.labels = C.labels || JSON.parse(JSON.stringify(DEF_LAB)); C.labels[g][k] = t.value.trim() || DEF_LAB[g][k]; }
     if (t.dataset.os) { const x = os()[+t.dataset.i]; x[t.dataset.os] = t.value.trim(); if (t.dataset.os === "kind") structural = true; }
     if (t.dataset.gname) C.grades.find(g => g.id === t.dataset.gname).name = t.value.trim();

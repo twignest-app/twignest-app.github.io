@@ -24,7 +24,7 @@
     const head = rows[hi].map(h => String(h).trim().toLowerCase()), find = re => head.findIndex(h => re.test(h));
     let nameI = find(/^(full ?name|student ?name|name)$/), firstI = find(/^first ?name$/), lastI = find(/^(last ?name|surname|family ?name)$/);
     if (nameI < 0 && firstI < 0) nameI = find(/name/);
-    const idI = find(/^(student ?id|student ?no\.?|student ?number|school ?(id|number|no\.?)|id|number|emis|esis|sims ?id|admission ?(no\.?|number))$/), classI = find(/^(class|section|homeroom|class ?name)$/), gradeI = find(/^(grade|year ?group|year|grade ?level)$/), groupsI = find(/^(groups?|tags?)$/);
+    const arI = head.findIndex(h => /arabic|عربي|بالعربي|^الاسم/.test(h)), idI = find(/^(student ?id|student ?no\.?|student ?number|school ?(id|number|no\.?)|id|number|emis|esis|sims ?id|admission ?(no\.?|number))$/), classI = find(/^(class|section|homeroom|class ?name)$/), gradeI = find(/^(grade|year ?group|year|grade ?level)$/), groupsI = find(/^(groups?|tags?)$/);
     const setupGroups = setup.config.groups || [], flagCols = setupGroups.map(g => [g, head.findIndex(h => norm(h) === norm(g))]).filter(x => x[1] >= 0);
     if (classI < 0) throw new Error("I couldn’t find a “Class” column. Add a column called Class with names like 2A.");
     const out = [];
@@ -40,7 +40,7 @@
       const grade = existing ? (setup.config.grades || []).find(g => g.id === existing.grade_id) : (gradeI >= 0 ? matchGrade(r[gradeI]) : null);
       let problem = "";
       if (!name) problem = "No name"; else if (!cls) problem = "No class"; else if (!grade) problem = gradeI >= 0 && String(r[gradeI]).trim() ? `Grade “${r[gradeI]}” isn’t in your setup` : "No grade for a new class";
-      out.push({ row: hi + i + 2, name, sn: idI >= 0 ? String(r[idI] ?? "").trim() || null : null, cls, grade, groups: known, unknown, existing, problem });
+      out.push({ row: hi + i + 2, name, sn: idI >= 0 ? String(r[idI] ?? "").trim() || null : null, ar: arI >= 0 ? String(r[arI] ?? "").trim() || null : null, cls, grade, groups: known, unknown, existing, problem });
     });
     const ok = out.filter(x => !x.problem), seen = new Set();
     ok.forEach(x => { const k = x.cls.toLowerCase() + "|" + x.name.toLowerCase(); x.dupe = seen.has(k); seen.add(k);
@@ -60,8 +60,8 @@
       ${bad.length ? `<div class="msg err">${bad.length} row${bad.length === 1 ? "" : "s"} can’t be imported and will be skipped:</div><div class="tablewrap"><table><tr><th>Row</th><th>Name</th><th>Class</th><th>Problem</th></tr>${bad.slice(0, 30).map(x => `<tr><td>${x.row}</td><td>${esc(x.name)}</td><td>${esc(x.cls)}</td><td>${esc(x.problem)}</td></tr>`).join("")}</table></div>` : ""}
       ${dup.length ? `<div class="msg info">${dup.length} name${dup.length === 1 ? " appears" : "s appear"} twice in the same class and will only be added once.</div>` : ""}
       ${p.unknown.length ? `<div class="msg info">These groups aren’t in your setup and will be ignored: ${p.unknown.map(esc).join(", ")}. Add them in School setup, step 6, if you need them.</div>` : ""}
-      <h3>First rows</h3><div class="tablewrap"><table><tr><th>Name</th><th>Student ID</th><th>Class</th><th>Grade</th><th>Groups</th><th></th></tr>
-      ${ok.slice(0, 15).map(x => `<tr><td>${esc(x.name)}</td><td>${esc(x.sn || "")}</td><td>${esc(x.cls)}</td><td>${esc(x.grade.name)}</td><td>${x.groups.map(esc).join(", ")}</td><td class="note">${x.match ? "Already added" : "New"}</td></tr>`).join("")}</table></div>
+      <h3>First rows</h3><div class="tablewrap"><table><tr><th>Name</th><th>Arabic name</th><th>Student ID</th><th>Class</th><th>Grade</th><th>Groups</th><th></th></tr>
+      ${ok.slice(0, 15).map(x => `<tr><td>${esc(x.name)}</td><td dir="rtl">${esc(x.ar || "")}</td><td>${esc(x.sn || "")}</td><td>${esc(x.cls)}</td><td>${esc(x.grade.name)}</td><td>${x.groups.map(esc).join(", ")}</td><td class="note">${x.match ? "Already added" : "New"}</td></tr>`).join("")}</table></div>
       ${ok.length > 15 ? `<p class="note">…and ${ok.length - 15} more.</p>` : ""}
       <p class="note">Students already in TwigNest but not in this file are left as they are.</p>
       <div class="row" style="margin-top:12px"><button class="btn" data-cact="do-import" ${add + upd + p.newClasses.length ? "" : "disabled"}>Import ${add} student${add === 1 ? "" : "s"}</button><button class="btn ghost" data-cact="cancel-import">Cancel</button><span id="impMsg" class="note"></span></div></div>`;
@@ -92,7 +92,7 @@
     let h = `<div class="card"><h2>Add a class</h2><p class="note">For ${esc(setup.year)}. Add each class, choose its teachers, then add its students. You can paste names straight from Excel.</p>
       <div class="row" style="margin-top:12px"><select id="newGrade" aria-label="Grade">${grades.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select>
       <input id="newClass" type="text" placeholder="Class name, for example 2A" aria-label="Class name" style="max-width:260px"><button class="btn" data-cact="add-class">Add class</button></div><div id="cMsg"></div>
-      <h3>Or upload a whole-school list</h3><p class="note">Upload an Excel or CSV file with the columns <b>Name</b>, <b>Student ID</b>, <b>Class</b>, <b>Grade</b> and <b>Groups</b>. The Student ID is optional but recommended, since it matches students exactly. TwigNest creates any missing classes and shows you a preview before anything is saved.</p>
+      <h3>Or upload a whole-school list</h3><p class="note">Upload an Excel or CSV file with the columns <b>Name</b>, <b>Arabic name</b>, <b>Student ID</b>, <b>Class</b>, <b>Grade</b> and <b>Groups</b>. The Arabic name is used in Arabic report comments. The Student ID is optional but recommended, since it matches students exactly. TwigNest creates any missing classes and shows you a preview before anything is saved.</p>
       <div class="row"><label class="btn" style="display:inline-block;margin:0;font-size:16px;cursor:pointer">Upload a list<input type="file" id="listFile" accept=".xlsx,.xls,.csv" hidden></label><button class="btn ghost" data-cact="template">Download the template</button></div><div id="upMsg"></div></div>`;
     if (preview) h += previewCard();
     const byGrade = grades.map(g => [g, classes.filter(c => c.grade_id === g.id)]).filter(x => x[1].length);
@@ -118,9 +118,9 @@
 
   function studentEditor(c) {
     const list = students.filter(s => s.class_id === c.id), groups = setup.config.groups || [];
-    return `<div style="margin-top:12px"><label for="st-${c.id}">One student per line: full name, student ID, then any groups, separated by commas</label>
-      <p class="note">The student ID (school number) is optional. Groups you can use: ${groups.map(esc).join(", ") || "none set up"}. For example: Layla Hassan, 20145, EAL</p>
-      <textarea id="st-${c.id}" style="min-height:220px">${esc(list.map(s => [s.full_name, s.student_number, ...(s.groups || [])].filter(Boolean).join(", ")).join("\n"))}</textarea>
+    return `<div style="margin-top:12px"><label for="st-${c.id}">One student per line: full name, Arabic name, student ID, then any groups, separated by commas</label>
+      <p class="note">The Arabic name and student ID are optional. Groups you can use: ${groups.map(esc).join(", ") || "none set up"}. For example: Layla Hassan, ليلى حسن, 20145, EAL</p>
+      <textarea id="st-${c.id}" style="min-height:220px">${esc(list.map(s => [s.full_name, s.arabic_name, s.student_number, ...(s.groups || [])].filter(Boolean).join(", ")).join("\n"))}</textarea>
       <div class="row" style="margin-top:8px"><button class="btn" data-cact="save-students" data-id="${c.id}">Save students</button><span id="stMsg-${c.id}" class="note"></span></div>
       <p class="note">Removing a name archives that student. Their data is kept, not deleted.</p></div>`;
   }
@@ -142,8 +142,8 @@
     if (a === "template") {
       await loadXLSX();
       const g = (setup.config.grades || []), ex = g.find(x => /2/.test(x.name)) || g[0] || { name: "Grade 2" }, grp = setup.config.groups || [];
-      const ws = XLSX.utils.aoa_to_sheet([["Name", "Student ID", "Class", "Grade", "Groups"], ["Layla Hassan", "20145", "2A", ex.name, grp[2] || "EAL"], ["Omar Khalid", "20146", "2A", ex.name, ""], ["Yusuf Rahman", "20147", "2A", ex.name, [grp[0], grp[3]].filter(Boolean).join(", ")]]);
-      ws["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 24 }];
+      const ws = XLSX.utils.aoa_to_sheet([["Name", "Arabic name", "Student ID", "Class", "Grade", "Groups"], ["Layla Hassan", "ليلى حسن", "20145", "2A", ex.name, grp[2] || "EAL"], ["Omar Khalid", "عمر خالد", "20146", "2A", ex.name, ""], ["Yusuf Rahman", "يوسف رحمن", "20147", "2A", ex.name, [grp[0], grp[3]].filter(Boolean).join(", ")]]);
+      ws["!cols"] = [{ wch: 28 }, { wch: 24 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 24 }];
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Students"); XLSX.writeFile(wb, "TwigNest student list template.xlsx"); return;
     }
     if (a === "cancel-import") { preview = null; return render(); }
@@ -152,9 +152,9 @@
       if (p.newClasses.length) { const { error } = await sb.from("classes").insert(p.newClasses.map(c => ({ school_id: ctx.school.id, year: setup.year, grade_id: c.grade.id, name: c.name }))); if (error) { msg.textContent = error.message; return; } }
       await load();
       const ok = p.rows.filter(x => !x.problem && !x.dupe), cid = n => classes.find(c => c.name.toLowerCase() === n.toLowerCase()).id;
-      const ins = ok.filter(x => !x.match).map(x => ({ school_id: ctx.school.id, class_id: cid(x.cls), full_name: x.name, groups: x.groups, student_number: x.sn }));
+      const ins = ok.filter(x => !x.match).map(x => ({ school_id: ctx.school.id, class_id: cid(x.cls), full_name: x.name, groups: x.groups, student_number: x.sn, arabic_name: x.ar }));
       for (let i = 0; i < ins.length; i += 400) { const { error } = await sb.from("students").insert(ins.slice(i, i + 400)); if (error) { msg.textContent = error.message; return; } msg.textContent = `Importing… ${Math.min(i + 400, ins.length)} of ${ins.length}`; }
-      for (const x of ok.filter(x => x.match)) { const ch = { groups: x.groups, class_id: cid(x.cls) }; if (x.sn) ch.student_number = x.sn; await sb.from("students").update(ch).eq("id", x.match.id); }
+      for (const x of ok.filter(x => x.match)) { const ch = { groups: x.groups, class_id: cid(x.cls) }; if (x.sn) ch.student_number = x.sn; if (x.ar) ch.arabic_name = x.ar; await sb.from("students").update(ch).eq("id", x.match.id); }
       preview = null; await load(); render();
       ctx.el.insertAdjacentHTML("afterbegin", `<div class="msg ok" style="margin-bottom:12px">Imported ${ins.length} student${ins.length === 1 ? "" : "s"}.</div>`); return;
     }
@@ -169,19 +169,19 @@
       const msg = document.getElementById("stMsg-" + id), groups = setup.config.groups || [];
       const rows = lines(document.getElementById("st-" + id).value).map(l => { const p = l.split(/[,\t]/).map(x => x.trim()).filter(Boolean);
         const gs = p.filter(x => groups.some(g => norm(g) === norm(x))).map(x => groups.find(g => norm(g) === norm(x)));
-        const rest = p.filter(x => !groups.some(g => norm(g) === norm(x))), idf = rest.find(x => /\d/.test(x)), nm = rest.find(x => x !== idf) || rest[0] || "";
-        return { full_name: nm, student_number: idf && idf !== nm ? idf : null, groups: gs, unknown: rest.filter(x => x !== nm && x !== idf) }; }).filter(r => r.full_name);
+        const isAr = x => /[\u0600-\u06ff]/.test(x), all = p.filter(x => !groups.some(g => norm(g) === norm(x))), ar = all.find(isAr), rest = all.filter(x => !isAr(x)), idf = rest.find(x => /\d/.test(x)), nm = rest.find(x => x !== idf) || ar || "";
+        return { full_name: nm, arabic_name: ar || null, student_number: idf && idf !== nm ? idf : null, groups: gs, unknown: rest.filter(x => x !== nm && x !== idf) }; }).filter(r => r.full_name);
       const unknown = [...new Set(rows.flatMap(r => r.unknown))];
       if (unknown.length && !confirm(`These groups aren’t in your setup and will be ignored: ${unknown.join(", ")}. Continue?`)) return;
       const current = students.filter(s => s.class_id === id), keep = new Set();
       const inserts = [], updates = [];
       rows.forEach(r => { const ex = current.find(s => !keep.has(s.id) && r.student_number && s.student_number && norm(s.student_number) === norm(r.student_number)) || current.find(s => s.full_name.toLowerCase() === r.full_name.toLowerCase() && !keep.has(s.id));
-        if (ex) { keep.add(ex.id); if (JSON.stringify(ex.groups || []) !== JSON.stringify(r.groups) || ex.full_name !== r.full_name || (ex.student_number || null) !== (r.student_number || null)) updates.push({ id: ex.id, full_name: r.full_name, groups: r.groups, student_number: r.student_number }); }
-        else inserts.push({ school_id: ctx.school.id, class_id: id, full_name: r.full_name, groups: r.groups, student_number: r.student_number }); });
+        if (ex) { keep.add(ex.id); if (JSON.stringify(ex.groups || []) !== JSON.stringify(r.groups) || ex.full_name !== r.full_name || (ex.student_number || null) !== (r.student_number || null) || (ex.arabic_name || null) !== (r.arabic_name || null)) updates.push({ id: ex.id, full_name: r.full_name, groups: r.groups, student_number: r.student_number, arabic_name: r.arabic_name }); }
+        else inserts.push({ school_id: ctx.school.id, class_id: id, full_name: r.full_name, groups: r.groups, student_number: r.student_number, arabic_name: r.arabic_name }); });
       const archive = current.filter(s => !keep.has(s.id)).map(s => s.id);
       msg.textContent = "Saving…";
       if (inserts.length) { const { error } = await sb.from("students").insert(inserts); if (error) { msg.textContent = error.message; return; } }
-      for (const u of updates) { const { error } = await sb.from("students").update({ full_name: u.full_name, groups: u.groups, student_number: u.student_number }).eq("id", u.id); if (error) { msg.textContent = error.message; return; } }
+      for (const u of updates) { const { error } = await sb.from("students").update({ full_name: u.full_name, groups: u.groups, student_number: u.student_number, arabic_name: u.arabic_name }).eq("id", u.id); if (error) { msg.textContent = error.message; return; } }
       if (archive.length) { const { error } = await sb.from("students").update({ archived: true }).in("id", archive); if (error) { msg.textContent = error.message; return; } }
       openClass = null;
     }

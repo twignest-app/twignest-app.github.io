@@ -164,7 +164,7 @@
       <div class="card"><h2>Progress from baseline</h2><div class="row">${strands().map(([a, b]) => `<button class="chip" data-pstrand="${b.id}" aria-pressed="${b.id === ui.pStrand}">${esc(sname(a, b))}</button>`).join("")}</div>${chart(sid, pst)}</div>
       <div class="grid2"><div class="card"><h2>Gaps to fill</h2>${gapsH}</div><div class="card"><h2>Ideas to move forward</h2>${aheadH}</div></div>
       <div class="card"><h2>Next steps for ${esc(C.terms[t])}</h2><p class="note">Suggested from the gaps above. Edit them in your own words: they’re saved for this student and used in the report comment and printed report.</p>
-        ${strands().map(([a, b]) => `<label class="note" for="pn-${sid}-${b.id}" style="display:block;margin-top:10px"><b>${esc(sname(a, b))}</b>${nsSaved(String(t), sid, b.id) ? " · edited by teacher" : ""}</label><textarea id="pn-${sid}-${b.id}" class="rstep" data-pns="${sid}|${b.id}">${esc(nsFor(sid, b, t))}</textarea>`).join("")}</div>
+        ${strands().map(([a, b]) => `<label class="note" for="pn-${sid}-${b.id}" style="display:block;margin-top:10px"><b>${esc(sname(a, b))}</b>${nsSaved(String(t), sid, b.id) ? " · edited by teacher" : ""}</label><textarea id="pn-${sid}-${b.id}" class="rstep"${dirAttr(b)} data-pns="${sid}|${b.id}">${esc(nsFor(sid, b, t))}</textarea>`).join("")}</div>
       <div class="card"><h2>${esc(sname(psb, pst))}: all recorded data</h2><ul class="plan objl">${data || `<li class="note">Nothing recorded yet.</li>`}</ul></div></div>`;
     if (!d.open) d.showModal();
   }
@@ -178,7 +178,34 @@
     const m = C.gradeMin, lo = m[lv], hi = m[lv + 1] ?? 100.0001; if (e.pct < lo) return 0; if (e.pct >= hi) return 2;
     const f = (e.pct - lo) / Math.max(.0001, hi - lo); return f < 1 / 3 ? 0 : f >= 2 / 3 ? 2 : 1;
   }
+  const BANK_AR = [
+    ["أداء {name} في {strand} في بداياته الأولى، ويحتاج إلى دعم مكثف ومستمر من المعلم للمشاركة في التعلم.", "أداء {name} في {strand} في مراحله الأولى، ويحتاج إلى دعم كبير للوصول إلى التعلم.", "يظهر أداء {name} في {strand} خطوات أولى صغيرة بدعم كبير من المعلم."],
+    ["بدأت مهارات {name} في {strand} بالتطور، مع الاعتماد على نمذجة المعلم لإنجاز المهام.", "بدأت مهارات {name} في {strand} بالتطور، ويكون التعلم أفضل مع دعم المعلم ونمذجته.", "تتطور المهارات الأولية لدى {name} في {strand}، مع بدء إنجاز بعض المهام بدعم أقل."],
+    ["تتطور مهارات {name} في {strand} نحو المستوى المتوقع، مع الحاجة إلى دعم منتظم.", "تتطور مهارات {name} في {strand} بثبات نحو المستوى المتوقع، مع قدر من الدعم.", "أصبح أداء {name} في {strand} قريبا من المستوى المتوقع، مع الحاجة إلى الدعم في بعض الأحيان فقط."],
+    ["بلغ أداء {name} في {strand} المستوى المتوقع، مع ثقة متنامية في تطبيق التعلم الجديد.", "أداء {name} في {strand} في المستوى المتوقع، مع تطبيق التعلم الجديد بثقة متزايدة.", "أداء {name} في {strand} في المستوى المتوقع بثقة، مع تطبيق التعلم الجديد بدعم قليل."],
+    ["أداء {name} في {strand} ثابت في المستوى المتوقع، مع بداية التطبيق المستقل للمهارات.", "أداء {name} في {strand} ثابت في المستوى المتوقع، مع تطبيق المهارات باستقلالية.", "أداء {name} في {strand} ثابت جدا، مع تطبيق المهارات باستقلالية ودقة."],
+    ["أداء {name} في {strand} أعلى من المستوى المتوقع، مع بداية تطبيق المهارات في سياقات جديدة.", "أداء {name} في {strand} أعلى من المستوى المتوقع، مع تطبيق المهارات بثقة في سياقات جديدة.", "أداء {name} في {strand} أعلى بكثير من المستوى المتوقع، مع تطبيق المهارات بثقة ودقة في سياقات جديدة."],
+    ["أداء {name} في {strand} متميز، مع فهم عميق للتعلم.", "أداء {name} في {strand} متميز، مع فهم ممتاز وتطبيق مبدع للمهارات.", "أداء {name} في {strand} متميز جدا، مع فهم استثنائي وتطبيق مبدع ومستقل للمهارات."]];
+  const AR_GEN = "مواصلة تطبيق هذا التعلم وتعزيزه في سياقات جديدة.", AR_DEEP = "خوض تحديات أعمق تنمي التفكير وتوسعه.";
+  const isArSt = st => { const p = findStrand(st.id); return !!(p[0] && p[0].lang === "ar"); };
+  const arName = s => { if (!s.arabic_name) return s.full_name.split(" ")[0]; const w = s.arabic_name.trim().split(/\s+/); return /^عبد/.test(w[0]) && w[0].length <= 3 && w[1] ? w[0] + " " + w[1] : w[0]; };
+  const dirAttr = st => isArSt(st) ? ' dir="rtl" lang="ar"' : "";
+  function draftAr(sid, st, t, lvO, bandO) {
+    const k = String(t), s = studs.find(x => x.id === sid), si = studs.indexOf(s), ti = strands().findIndex(p => p[1].id === st.id);
+    const lv = lvO ?? level(sid, st, k); if (lv == null) return { text: "", lv: null, band: 1 };
+    const band = bandO ?? autoBand(sid, st, k), bank = (C.reports || {}).bankAr || BANK_AR, row = bank[lv] || [], nm = arName(s);
+    let base = (row[band] || row[1] || "").replace(/\{name\}/g, nm).replace(/\{strand\}/g, st.name);
+    const pre = ["", "خلال هذا الفصل، ", "على مدار الفصل، ", "في الأسابيع الأخيرة، "][(si + ti) % 4]; if (pre) base = pre + base;
+    const sec = [], gaps = [];
+    st.cols.filter(c => c.type === "objectives").forEach(c => { for (let i = 0; i <= t; i++) objs(c, i).forEach(o => { const v = stat(sid, o.id); if (!v) return; if (isEx(v)) sec.unshift(o); else if (credit(v) >= 1) sec.push(o); else gaps.push(o); }); });
+    let str = ""; if (sec.length) { const o = sec[si % Math.min(2, sec.length)]; str = [` ومن نقاط القوة لدى ${nm}: ${o.text}.`, ` ومن أبرز المهارات المتقنة لدى ${nm}: ${o.text}.`, ` ومن الجوانب المتميزة لدى ${nm}: ${o.text}.`][(si + ti) % 3].replace(/\.\./g, "."); }
+    const saved = nsSaved(String(t), sid, st.id), e = strandEval(sid, st, k);
+    const nx = " الخطوة التالية: " + (saved ? saved.trim() : gaps.length ? (gaps[0].step || "مزيد من التدريب على: " + gaps[0].text) : e && e.band === "above" ? AR_DEEP : AR_GEN).replace(/[^.!؟]$/, m => m + ".");
+    let text = base + str + nx; const lim = (C.reports || {}).limit || 600; if (text.length > lim) text = base + nx;
+    return { text: text.trim(), lv, band };
+  }
   function draft(sid, st, t, lvO, bandO) {
+    if (isArSt(st)) return draftAr(sid, st, t, lvO, bandO);
     const k = String(t), s = studs.find(x => x.id === sid), si = studs.indexOf(s), ti = strands().findIndex(p => p[1].id === st.id);
     const lv = lvO ?? level(sid, st, k); if (lv == null) return { text: "", lv: null, band: 1 };
     const band = bandO ?? autoBand(sid, st, k), bank = (C.reports || {}).bank || [], row = bank[lv] || [], nm = s.full_name.split(" ")[0];
@@ -201,6 +228,8 @@
   }
   const nsSaved = (t, sid, stid) => ((NS[t] || {})[sid] || {})[stid];
   function nsAuto(sid, st, t) {
+    if (isArSt(st)) { const gaps = []; st.cols.filter(c => c.type === "objectives").forEach(c => { for (let i = 0; i <= t; i++) objs(c, i).forEach(o => { const v = stat(sid, o.id); if (v && isGap(v)) gaps.push(o); }); });
+      if (gaps.length) return [...new Set(gaps.map(o => o.step || "مزيد من التدريب على: " + o.text))].slice(0, 2).join(" "); const e = strandEval(sid, st, String(t)); return e && e.band === "above" ? AR_DEEP : AR_GEN; }
     const pl = plan(sid, t), nm = sname(...findStrand(st.id)), mine = pl.gaps.filter(g => g.nm === nm && g.pri < 2).map(g => g.fix);
     const GEN = "Plan targeted support this term and review progress at the next checkpoint.", spec = [...new Set(mine)].filter(x => x !== GEN), uniq = spec.length ? spec.slice(0, 2) : [...new Set(mine)].slice(0, 1); if (uniq.length) return uniq.join(" ");
     const a = pl.ahead.filter(x => x.nm === nm).map(x => x.text); return a[0] || "Continue to apply and consolidate this learning in new contexts.";
@@ -218,10 +247,11 @@
       <div class="rgrid"><div><label class="note" for="rl-${key}"><b>Attainment this term</b></label><select id="rl-${key}" data-rlv="${key}" ${locked || chk ? "disabled" : ""}><option value="">From the data: ${e ? esc(lab(e.sug)) + " (" + e.pct + "%)" : "–"}</option>${C.scale.map((x, i) => `<option value="${i}" ${tl === i ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div>
         <div><label class="note" for="rp-${key}"><b>Progress this term</b></label><select id="rp-${key}" data-rpg="${key}" ${locked || chk ? "disabled" : ""}><option value="">From the data: ${p ? PROG[p.band] : "–"}</option>${Object.entries(PROG).map(([v, l]) => `<option value="${v}" ${c.progress === v ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
       <label class="note" for="rt-${key}"><b>Report comment</b>${c.text ? "" : " (drafted from the data, not saved yet)"}</label>
-      <textarea id="rt-${key}" data-rtx="${key}" class="rtext" ${locked ? "readonly" : ""}>${esc(text)}</textarea>
+      ${isArSt(st) && !s.arabic_name ? `<p class="note" style="color:var(--amber);margin:0 0 4px">No Arabic name saved for ${esc(s.full_name)}, so the English first name is used. Add it in Classes and students.</p>` : ""}
+      <textarea id="rt-${key}" data-rtx="${key}" class="rtext"${dirAttr(st)} ${locked ? "readonly" : ""}>${esc(text)}</textarea>
       <div class="row" style="justify-content:space-between"><span class="note">${chk ? "" : locked ? (c.status === "approved" ? "Approved by the buddy checker." : "Waiting for the buddy checker.") : "Edit freely. Changes save when you click away."}</span><span class="note rcount" id="rn-${key}">${text.length} / ${lim}</span></div>
       <label class="note" for="rs-${key}"><b>Next step</b> (used in the report)</label>
-      <textarea id="rs-${key}" data-rns="${key}" class="rstep" ${locked ? "readonly" : ""}>${esc(nsFor(sid, st, t))}</textarea>
+      <textarea id="rs-${key}" data-rns="${key}" class="rstep"${dirAttr(st)} ${locked ? "readonly" : ""}>${esc(nsFor(sid, st, t))}</textarea>
       ${chk ? `<label class="note" for="rk-${key}"><b>Note for the teacher</b></label><input type="text" id="rk-${key}" data-rnote="${key}" value="${esc(c.note || "")}">` : ""}
       <div class="row" style="margin-top:10px">${chk ? `<button class="btn ghost small" data-rc="return" data-k="${key}" ${c.status === "ready" ? "" : "disabled"}>Return with note</button><button class="btn small" data-rc="approve" data-k="${key}" ${["ready", "changes"].includes(c.status) ? "" : "disabled"}>Approve</button>`
         : locked ? `<button class="btn ghost small" data-rc="recall" data-k="${key}">${c.status === "approved" ? "Reopen" : "Take back to edit"}</button>`
@@ -242,11 +272,11 @@
       const [sb, st] = findStrand(ui.rstrand);
       h += `<div class="fbar"><label class="fl" for="rvStrand">Subject</label><select id="rvStrand" class="fsel">${list.map(([a, b]) => `<option value="${b.id}" ${b.id === ui.rstrand ? "selected" : ""}>${esc(sname(a, b))}</option>`).join("")}</select>
         <span class="note">${vs.length} students. When you finish, choose the next subject.</span></div>`;
-      h += vs.map(x => card(x.id, st, `${esc(x.full_name)}${x.student_number ? ` <span class="sid">${esc(x.student_number)}</span>` : ""}`)).join("");
+      h += vs.map(x => card(x.id, st, `${esc(x.full_name)}${isArSt(st) && x.arabic_name ? ` <span dir="rtl" lang="ar" class="arname">${esc(x.arabic_name)}</span>` : ""}${x.student_number ? ` <span class="sid">${esc(x.student_number)}</span>` : ""}`)).join("");
     } else if (ui.rview === "student") {
       const i = vs.findIndex(x => x.id === ui.rstud), x = vs[i];
       h += `<div class="fbar"><button class="btn ghost small" data-rstep="-1" ${i <= 0 ? "disabled" : ""}>← Previous</button><label class="fl" for="rvStud">Student</label><select id="rvStud" class="fsel">${vs.map(y => `<option value="${y.id}" ${y.id === ui.rstud ? "selected" : ""}>${esc(y.full_name)}</option>`).join("")}</select><button class="btn ghost small" data-rstep="1" ${i >= vs.length - 1 ? "disabled" : ""}>Next →</button><button class="btn ghost small" data-print="${x.id}">Print this report</button></div>`;
-      h += `<div class="card" style="margin-bottom:12px"><h2 style="margin:0">${esc(x.full_name)} ${x.student_number ? `<span class="sid">${esc(x.student_number)}</span>` : ""}</h2><div class="tags">${(x.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></div>`;
+      h += `<div class="card" style="margin-bottom:12px"><h2 style="margin:0">${esc(x.full_name)}${x.arabic_name ? ` <span dir="rtl" lang="ar" class="arname">${esc(x.arabic_name)}</span>` : ""} ${x.student_number ? `<span class="sid">${esc(x.student_number)}</span>` : ""}</h2><div class="tags">${(x.groups || []).map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div></div>`;
       h += list.map(([a, b]) => card(x.id, b, esc(sname(a, b)))).join("");
     } else {
       let tb = `<thead><tr><th class="namecol">Student</th>${list.map(([a, b]) => `<th class="colh"><b>${esc(sname(a, b))}</b></th>`).join("")}</tr></thead><tbody>`;
@@ -296,9 +326,9 @@
     C.subjects.forEach(sb => sb.strands.forEach(st => { const e = strandEval(s.id, st, k), lv = level(s.id, st, k), p = progFinal(s.id, st, t), ot = onTrack(s.id, st, t), cm = cmt(k, s.id, st.id);
       const posB = lv != null ? (C.gradePos[lv] || (e && e.band)) : null;
       rows += `<tr><td><b>${esc(sb.name)}</b>${sb.name !== st.name ? `<br>${esc(st.name)}` : ""}</td><td>${esc(lab(level(s.id, st, "b")))}</td><td>${esc(lab(lv))}</td><td>${posB ? POS[posB] : "–"}</td><td>${p ? PROG[p.band] : "–"}</td><td>${ot == null ? "–" : ot.ok ? "On track" : "Needs support"}</td></tr>
-        ${cm && cm.status === "approved" && cm.text ? `<tr class="cm"><td colspan="6">${esc(cm.text)}<br><b>Next step:</b> ${esc(nsFor(s.id, st, t))}</td></tr>` : ""}`;
+        ${cm && cm.status === "approved" && cm.text ? (isArSt(st) ? `<tr class="cm"><td colspan="6" dir="rtl" lang="ar" style="text-align:right">${esc(cm.text)}</td></tr>` : `<tr class="cm"><td colspan="6">${esc(cm.text)}<br><b>Next step:</b> ${esc(nsFor(s.id, st, t))}</td></tr>`) : ""}`;
       if (withG) graphs += `<div class="rg"><b>${esc(sname(sb, st))}</b>${chart(s.id, st)}</div>`; }));
-    return `<section class="rep"><div class="rh"><img src="logo.png" alt=""><div><h1>${esc(s.full_name)}</h1><p>${s.student_number ? `Student ID ${esc(s.student_number)}. ` : ""}${esc(ctx.schoolName || "")}${ctx.schoolName ? ", " : ""}${esc(cls.name)}. ${esc(C.terms[t])} report, ${esc(cls.year)}</p></div></div>
+    return `<section class="rep"><div class="rh"><img src="logo.png" alt=""><div><h1>${esc(s.full_name)}${s.arabic_name ? ` <span dir="rtl" lang="ar" style="font-weight:600">${esc(s.arabic_name)}</span>` : ""}</h1><p>${s.student_number ? `Student ID ${esc(s.student_number)}. ` : ""}${esc(ctx.schoolName || "")}${ctx.schoolName ? ", " : ""}${esc(cls.name)}. ${esc(C.terms[t])} report, ${esc(cls.year)}</p></div></div>
       <p class="sum"><b>Overall:</b> level ${ov ? esc(lab(ov.lv)) : "–"}, ${ov ? POS[ov.band].toLowerCase() : "not yet assessed"}. Progress since the start of the year: ${pr ? PROG[pr.band].toLowerCase() : "–"}.</p>
       <table><thead><tr><th>Subject</th><th>Start of year</th><th>${esc(C.terms[t])}</th><th>Against curriculum standards</th><th>Progress</th><th>End-of-year target</th></tr></thead><tbody>${rows}</tbody></table>
       ${withG ? `<h2>Progress from the start of the year</h2><div class="rgs">${graphs}</div>` : ""}</section>`;
