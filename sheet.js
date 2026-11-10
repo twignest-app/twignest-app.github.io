@@ -356,7 +356,7 @@
     const tg = await sb.from("taught").select("obj_id").eq("class_id", cls.id);
     if (tg.error) throw tg.error; tg.data.forEach(r => TAUGHT.add(r.obj_id));
     if (ids.length) {
-      const [r, o, l] = await Promise.all([sb.from("results").select("*").in("student_id", ids), sb.from("objective_status").select("*").in("student_id", ids), sb.from("levels").select("*").in("student_id", ids)]);
+      const [r, o, l] = await Promise.all([sb.from("results").select("*").in("student_id", ids), sb.from("objective_status").select("*").in("student_id", ids), sb.from("student_levels").select("*").in("student_id", ids)]);
       const err = r.error || o.error || l.error; if (err) throw err;
       r.data.forEach(x => { ((R[x.student_id] = R[x.student_id] || {})[x.col_id] = (R[x.student_id] || {})[x.col_id] || {})[x.term] = x.value; });
       o.data.forEach(x => (ST[x.student_id] = ST[x.student_id] || {})[x.obj_id] = x.status);
@@ -479,7 +479,7 @@
     if (t.id === "rvStud") { ui.rstud = t.value; return render(); }
     if (t.dataset.rlv) { const [sid, stid] = t.dataset.rlv.split("|"), k = String(ui.term), m = ((LV[sid] = LV[sid] || {})[stid] = (LV[sid] || {})[stid] || {});
       if (t.value === "") delete m[k]; else m[k] = +t.value;
-      await run(t.value === "" ? ctx.sb.from("levels").delete().eq("student_id", sid).eq("strand_id", stid).eq("term", k) : ctx.sb.from("levels").upsert({ student_id: sid, strand_id: stid, term: k, level: +t.value }));
+      await run(t.value === "" ? ctx.sb.from("student_levels").delete().eq("student_id", sid).eq("strand_id", stid).eq("term", k) : ctx.sb.from("student_levels").upsert({ student_id: sid, strand_id: stid, term: k, level: +t.value }));
       if (cmt(k, sid, stid)) await upC(sid, stid, { level: t.value === "" ? null : +t.value }); render(); return focusCard(sid, stid); }
     if (t.dataset.rpg) { const [sid, stid] = t.dataset.rpg.split("|"); await upC(sid, stid, { progress: t.value || null }); render(); return focusCard(sid, stid); }
     if (t.dataset.rtx) { const [sid, stid] = t.dataset.rtx.split("|"), c = cmt(String(ui.term), sid, stid); if (!c || c.text !== t.value.trim()) await upC(sid, stid, { text: t.value.trim() }); return; }
@@ -504,7 +504,7 @@
     if (t.dataset.lv) {
       const [sid, stid, k] = t.dataset.lv.split("|"), m = ((LV[sid] = LV[sid] || {})[stid] = (LV[sid] || {})[stid] || {});
       if (t.value === "") delete m[k]; else m[k] = +t.value; refreshRow(sid);
-      run(t.value === "" ? ctx.sb.from("levels").delete().eq("student_id", sid).eq("strand_id", stid).eq("term", k) : ctx.sb.from("levels").upsert({ student_id: sid, strand_id: stid, term: k, level: +t.value }));
+      run(t.value === "" ? ctx.sb.from("student_levels").delete().eq("student_id", sid).eq("strand_id", stid).eq("term", k) : ctx.sb.from("student_levels").upsert({ student_id: sid, strand_id: stid, term: k, level: +t.value }));
     }
   }
 

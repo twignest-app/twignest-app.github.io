@@ -46,7 +46,7 @@ input[type=text],input[type=email],input[type=password],select{width:100%;border
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
 .note{color:var(--muted);font-size:14px}
 .badge{display:inline-block;font-size:12.5px;font-weight:800;padding:3px 10px;border-radius:999px}
-.b-pending{background:var(--amber-soft);color:var(--amber)}.b-approved{background:var(--sage-soft);color:var(--sage)}.b-suspended{background:var(--red-soft);color:var(--red)}
+.b-pending{background:var(--amber-soft);color:var(--amber)}.b-approved,.b-active{background:var(--sage-soft);color:var(--sage)}.b-suspended{background:var(--red-soft);color:var(--red)}
 .code{font-size:28px;font-weight:800;letter-spacing:.15em;color:var(--plum);background:var(--plum-soft);border-radius:12px;padding:8px 16px;display:inline-block}
 .tablewrap{overflow-x:auto}
 table{border-collapse:collapse;width:100%}
@@ -207,14 +207,15 @@ a.btn{text-decoration:none;display:inline-block}
 <script src="school.js"></script>
 <script src="results.js"></script>
 <script>
-const SUPABASE_URL = "https://oivsizxgekpiltrmrmqh.supabase.co";
-const SUPABASE_KEY = "sb_publishable_5cHJA5XXHwRe-YyTeo-deA_-3xZS5DP";
+const SUPABASE_URL = "https://gvhzbxpgebgjnegdiijp.supabase.co";
+const SUPABASE_KEY = "sb_publishable_aEQ4MVt00kNu8PaVtrNnqQ_9guhxPYM";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.getElementById("app"), who = document.getElementById("who");
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ROLES = {admin:"TwigNest admin", school_lead:"School lead", teacher:"Teacher", checker:"Buddy checker"};
 const here = location.origin + location.pathname;
 let authTab = "landing", recovering = false;
+let showIntro = new URLSearchParams(location.search).has("intro");
 
 function friendly(e){
   const m = (e && (e.message || e.error_description)) || String(e);
@@ -255,7 +256,10 @@ function landingView(){
       <div><span class="lp-num">3</span><h3>Act on what you see</h3><p>See who needs support, fill gaps with suggested next steps, and write reports in a fraction of the time.</p></div></div></section>
     <section class="lp-cta"><h2>Ready to bring your data together?</h2><p>Register your school and start setting up in minutes. Your teachers join with your school code.</p><div class="row" style="justify-content:center"><button class="btn" data-auth="signup">Register your school</button><a class="btn ghost" href="demo.html">See a demo first</a></div></section>
     <footer class="lp-foot"><img src="icon.png" alt=""><span>TwigNest</span></footer></div>`;
-  app.querySelectorAll("[data-auth]").forEach(b => b.onclick = () => { authTab = b.dataset.auth; authView(); window.scrollTo(0, 0); });
+  app.querySelectorAll("[data-auth]").forEach(b => b.onclick = async () => {
+    if (showIntro) { showIntro = false; history.replaceState(null, "", location.pathname);
+      const { data: { session } } = await sb.auth.getSession(); if (session) { window.scrollTo(0, 0); return render(); } }
+    authTab = b.dataset.auth; authView(); window.scrollTo(0, 0); });
 }
 
 function authView(){
@@ -333,15 +337,15 @@ function chooseView(p){
         <form id="regF"><label for="sn">School name</label><input id="sn" type="text" required>
         <label for="sc">Country</label><input id="sc" type="text" value="United Arab Emirates" required>
         <button class="btn full" id="regB" type="submit">Register school</button></form><div id="regM"></div></div>
-      <div class="card"><h2>Join my school</h2><p class="note">For teachers. Ask your school lead for your school’s 6-character code.</p>
-        <form id="joinF"><label for="jc">School code</label><input id="jc" type="text" maxlength="6" style="text-transform:uppercase;letter-spacing:.15em" required>
+      <div class="card"><h2>Join my school</h2><p class="note">For teachers. Ask your school lead for your school’s 8-character code.</p>
+        <form id="joinF"><label for="jc">School code</label><input id="jc" type="text" maxlength="8" style="text-transform:uppercase;letter-spacing:.15em" required>
         <button class="btn full" id="joinB" type="submit">Join school</button></form><div id="joinM"></div></div>
     </div>`;
   document.getElementById("regF").onsubmit = e => { e.preventDefault(); busy(document.getElementById("regB"), async () => {
-    const { error } = await sb.rpc("register_school", { p_name: document.getElementById("sn").value, p_country: document.getElementById("sc").value });
+    const { error } = await sb.rpc("hub_register_school", { p_name: document.getElementById("sn").value, p_country: document.getElementById("sc").value });
     if (error) return show(document.getElementById("regM"), friendly(error), "err"); render(); }); };
   document.getElementById("joinF").onsubmit = e => { e.preventDefault(); busy(document.getElementById("joinB"), async () => {
-    const { error } = await sb.rpc("join_school", { p_code: document.getElementById("jc").value });
+    const { error } = await sb.rpc("hub_join_school", { p_code: document.getElementById("jc").value });
     if (error) return show(document.getElementById("joinM"), friendly(error), "err"); render(); }); };
 }
 
@@ -358,7 +362,7 @@ async function adminView(){
     ${schools.map(s => { const l = lead(s.created_by); return `<tr><td><b>${esc(s.name)}</b><br><span class="note">${esc(s.country)}</span></td>
       <td>${esc(l ? (l.full_name || "") : "")}<br><span class="note">${esc(l ? l.email : "")}</span></td><td>${esc(s.join_code)}</td>
       <td><span class="badge b-${s.status}">${s.status[0].toUpperCase() + s.status.slice(1)}</span></td>
-      <td class="row">${s.status !== "approved" ? `<button class="btn small" data-s="${s.id}" data-st="approved">Approve</button>` : ""}
+      <td class="row">${s.status !== "active" ? `<button class="btn small" data-s="${s.id}" data-st="active">Approve</button>` : ""}
         ${s.status !== "suspended" ? `<button class="btn ghost small" data-s="${s.id}" data-st="suspended">Suspend</button>` : ""}</td></tr>`; }).join("")}</table>`;
   box.querySelectorAll("[data-s]").forEach(b => b.onclick = () => busy(b, async () => {
     if (b.dataset.st === "suspended" && !confirm("Suspend this school? Its members will lose access until you approve it again.")) return;
@@ -399,13 +403,14 @@ async function render(){
   if (recovering) return resetView();
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return authView();
+  if (showIntro) { authTab = "landing"; return landingView(); }
   const { data: p, error } = await sb.from("profiles").select("*").eq("id", session.user.id).single();
   if (error || !p) { app.innerHTML = `<div class="card"><div class="msg err">We couldn’t load your account. Please sign out and try again.</div></div>`; return; }
   header(p);
   if (p.role === "admin") { drawSide(p, [["home", "Schools"]]); return adminView(); }
   if (!p.school_id) { document.body.classList.add("auth"); chooseView(p); return addOut(); }
   const { data: school } = await sb.from("schools").select("*").eq("id", p.school_id).single();
-  const pre = !school || school.status !== "approved" || !p.active;
+  const pre = !school || school.status !== "active" || !p.active;
   if (pre) document.body.classList.add("auth");
   if (!school) return waitView("Almost there", "We couldn’t find your school. Please contact TwigNest.");
   if (school.status === "pending") return waitView(`${school.name} is waiting for approval`, "TwigNest will review your school soon. You’ll be able to set it up as soon as it’s approved.");

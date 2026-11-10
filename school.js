@@ -28,7 +28,7 @@
     R = {}; ST = {}; LV = {}; TG = {};
     (await fetchAll("results", "student_id,col_id,term,value")).forEach(x => { if (!sIds.has(x.student_id)) return; const a = R[x.student_id] = R[x.student_id] || {}; (a[x.col_id] = a[x.col_id] || {})[x.term] = x.value; });
     (await fetchAll("objective_status", "student_id,obj_id,status")).forEach(x => { if (sIds.has(x.student_id)) (ST[x.student_id] = ST[x.student_id] || {})[x.obj_id] = x.status; });
-    (await fetchAll("levels", "student_id,strand_id,term,level")).forEach(x => { if (!sIds.has(x.student_id)) return; const a = LV[x.student_id] = LV[x.student_id] || {}; (a[x.strand_id] = a[x.strand_id] || {})[x.term] = x.level; });
+    (await fetchAll("student_levels", "student_id,strand_id,term,level")).forEach(x => { if (!sIds.has(x.student_id)) return; const a = LV[x.student_id] = LV[x.student_id] || {}; (a[x.strand_id] = a[x.strand_id] || {})[x.term] = x.level; });
     (await fetchAll("taught", "class_id,obj_id")).forEach(x => (TG[x.class_id] = TG[x.class_id] || new Set()).add(x.obj_id));
     CMS = (await fetchAll("report_comments", "student_id,strand_id,term,status")).filter(x => sIds.has(x.student_id));
     LINKS = await fetchAll("class_teachers", "class_id,teacher_id,subject_id");
