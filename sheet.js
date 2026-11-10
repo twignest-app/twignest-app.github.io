@@ -424,7 +424,7 @@
   document.addEventListener("input", e => { if (e.target.id === "edText") count(); });
   window.TNSheet = {
     async open(context) {
-      ctx = context; cls = ctx.cls; pending = 0; if (ctx.role === "checker") ui.mode = "reports";
+      ctx = context; cls = ctx.cls; pending = 0; if (ctx.mode) ui.mode = ctx.mode; if (ctx.role === "checker") ui.mode = "reports";
       if (!bound) { document.addEventListener("click", onClick); document.addEventListener("change", onChange); bound = true; }
       ctx.el.innerHTML = `<div class="card"><p class="note">Loading ${esc(cls.name)}…</p></div>`;
       try { await load(); render(); } catch (err) { ctx.el.innerHTML = `<div class="card"><div class="msg err">${esc(err.message || err)}</div><p><button class="btn ghost" data-sh="back">← Back</button></p></div>`; }
